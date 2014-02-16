@@ -48,17 +48,14 @@ tokens :-
   "]"                           {tag' TRightBracket             }
   "{"                           {tag' TLeftBrace                }
   "}"                           {tag' TRightBrace               }
-  "//"                          {tag' TStartSingleLineComment   }
-  "/*"                          {tag' TStartMultiLineComment    }
-  "*/"                          {tag' TEndMultiLineComment      }
+  "//".*                        {tag' TSingleLineComment        }
+  "/*"[\x00-\x10ffff]*"*/"      {tag' TMultiLineComment         }
 
   [$alpha _][$alpha $digit _]*  {tag $ TIdLiteral               }
   0[lL]                         {tag $ TLongLiteral . readLong  }
   [1-9]$digit*[lL]              {tag $ TLongLiteral . readLong  }
   0                             {tag $ TIntLiteral  . read      }
   [1-9]$digit*                  {tag $ TIntLiteral  . read      }
-
-  .                             {tag' TUnknown}
 
 {
 
@@ -102,11 +99,8 @@ data Token
  | TRightBracket
  | TLeftBrace
  | TRightBrace
- | TStartSingleLineComment
- | TStartMultiLineComment
- | TEndMultiLineComment
-
- | TUnknown
+ | TSingleLineComment
+ | TMultiLineComment
  deriving (Eq, Ord, Show)
 
 type SourceInfo = (Int, Int)
