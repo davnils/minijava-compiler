@@ -40,6 +40,7 @@ tokens :-
   "-"                           {tag' TSub                      }
   "*"                           {tag' TMul                      }
 
+  "="                           {tag' TAssignment               }
   ","                           {tag' TComma                    }
   "."                           {tag' TDot                      }
   ";"                           {tag' TSemiColon                }
@@ -92,6 +93,7 @@ data Token
  | TSub
  | TMul
 
+ | TAssignment
  | TComma
  | TDot
  | TSemiColon

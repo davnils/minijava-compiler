@@ -38,6 +38,7 @@ import Lexer
   '-'                         { TSub               }
   '*'                         { TMul               }
 
+  '='                         { TAssignment        }
   ','                         { TComma             }
   '.'                         { TDot               }
   ';'                         { TSemiColon         }
@@ -56,7 +57,64 @@ import Lexer
 
 %%
 
-MainClass : class idliteral '{' public static void main '(' string '[' ']' idliteral ')' '{' '}' '}' { Class $2 [] [MainMethod [] [] []] }
+MainClass
+  : class idliteral '{' public static void main '(' string '[' ']' idliteral ')' '{' '}' '}' { Class $2 [] [MainMethod [] [] []] }
+
+ClassDecl
+  : class idliteral '{' VarDecl MethodDecl '}' { $1 }
+
+VarDecl
+  : Type idliteral ';'                  { $1 }
+
+MethodDecl
+  : public Type idliteral '(' FormalList ')' '{' VarDecl Stmt return Expr ';' '}' { $1 }
+
+FormalList
+  : Type idliteral FormalRest           { $1 $2 }
+
+FormalRest
+  : ',' Type idliteral                  { $2 $3 }
+
+Type
+  : int '[' ']'                         { TypeIntegerArray }
+  | boolean                             { TypeBoolean }
+  | int                                 { TypeInteger }
+  | idliteral                           { $1 }
+
+Stmt
+  : if '(' Expr ')' Stmt else Stmt      { StatementIf $3 $5 $7 }
+  | while '(' Expr ')' Stmt             { StatementWhile $3 $5 }
+  | print '(' Expr ')' ';'              { StatementPrint $3 }
+  | idliteral '=' Expr ';'              { StatementAssignment $1 $3 }
+  | idliteral '[' Expr ']' '=' Expr ';' { StatementIndexedAssignment $1 $3 $6 }
+
+Expr
+  : Expr Op Expr                        { ExprOp $1 $2 $3 }
+  | Expr '[' Expr ']'                   { ExprList $1 $3 }
+  | Expr '.' length                     { ExprLength $1 }
+  | Expr '.' idliteral '(' ExpList ')'  { ExprInvocation $1 $3 $5 }
+  | intliteral                          { ExprInt $1 }
+  | true                                { ExprTrue }
+  | false                               { ExprFalse }
+  | idliteral                           { $1 }
+  | this                                { ExprThis }
+  | new int '[' Expr ']'                { ExprIntArray $4 }
+  | new idliteral '(' ')'               { ExprNewObject $2 }
+  | '!' Expr                            { ExprNegation $2 }
+  | '(' Expr ')'                        { $2 }
+
+Op
+  : '&&'                                { OperandLogicalAnd }
+  | '<'                                 { OperandLess }
+  | '+'                                 { OperandPlus }
+  | '-'                                 { OperandMinus }
+  | '*'                                 { OperandMult }
+
+ExpList
+  : Expr ExprRest                       { $1 }
+
+ExprRest
+  : ',' Expr                            { $2 }
 
 {
 
