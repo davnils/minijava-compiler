@@ -4,4 +4,4 @@ import Lexer
 import Parser
 
 main :: IO ()
-main = getContents >>= print . parseMiniJava . alexScanTokens
+main = getContents >>= print . parseMiniJava . map fst . alexScanTokens

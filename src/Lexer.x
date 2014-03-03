@@ -16,6 +16,7 @@ tokens :-
   "class"                       {tag' TClass                    }
   "public"                      {tag' TPublic                   }
   "static"                      {tag' TStatic                   }
+  "main"                        {tag' TMain                     }
   "new"                         {tag' TNew                      }
   "return"                      {tag' TReturn                   }
   "if"                          {tag' TIf                       }
@@ -63,6 +64,7 @@ data Token
  = TClass
  | TPublic
  | TStatic
+ | TMain
  | TNew
  | TReturn
  | TIf
