@@ -1,5 +1,5 @@
 {
-module Main where
+module Lexer where
 
 import Data.Char (isAlpha)
 
@@ -114,7 +114,7 @@ tag f (AlexPn _ row col) input =  (f input, (row, col))
 tag' :: Token -> AlexPosn -> String -> (Token, SourceInfo)
 tag' res pos =  tag (const res) pos
 
-main = do
+{-main = do
   s <- getContents
-  print $ alexScanTokens s
+  print $ alexScanTokens s-}
 }
