@@ -124,8 +124,10 @@ Op
   | '*'                                 { OperandMult }
 
 ExpList
-  : Expr ExpList                        { $1 : $2 }
-  | ',' Expr ExpList                    { $2 : $3 }
+  : Expr ExpRest                        { $1 : $2 }
+
+ExpRest
+  : ',' Expr ExpRest                    { $2 : $3 }
   | {- empty -}                         { [] }
 
 {
