@@ -4,4 +4,8 @@ import Lexer
 import Parser
 
 main :: IO ()
-main = getContents >>= print . parseMiniJava . map fst . alexScanTokens
+main = do
+  input <- getContents
+  let tokens = alexScanTokens input
+  print $ tokens
+  print . parseMiniJava . map fst $ tokens

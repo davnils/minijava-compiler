@@ -27,7 +27,7 @@ tokens :-
   "this"                        {tag' TThis                     }
 
   "void"                        {tag' TVoid                     }
-  "string"                      {tag' TString                   }
+  "String"                      {tag' TString                   }
   "int"                         {tag' TInt                      }
   "boolean"                     {tag' TBoolean                  }
   "true"                        {tag' TTrue                     }
@@ -76,8 +76,8 @@ data Token
  | TThis
 
  | TIdLiteral String
- | TIntLiteral Integer
- | TLongLiteral Integer
+ | TIntLiteral Int
+ | TLongLiteral Int
 
  | TVoid
  | TString

@@ -57,46 +57,59 @@ import Lexer
 
 %%
 
+Program
+  : MainClass ClassDeclList             { $1 : $2 }
+
 MainClass
-  : class idliteral '{' public static void main '(' string '[' ']' idliteral ')' '{' '}' '}' { Class $2 [] [MainMethod [] [] []] }
+  : class idliteral '{' public static void main '(' string '[' ']' idliteral ')' '{' VarDeclList StmtList '}' '}'
+                                        { Class $2 [{- empty -}] [MainMethod [Variable TypeString $12] $15 $16] }
 
-ClassDecl
-  : class idliteral '{' VarDecl MethodDecl '}' { $1 }
+ClassDeclList
+  : class idliteral '{' VarDeclList MethodDeclList '}' ClassDeclList
+                                        { Class $2 $4 $5 : $7}
+  | {- empty -}                         { [] }
 
-VarDecl
-  : Type idliteral ';'                  { $1 }
+VarDeclList
+  : Type idliteral ';' VarDeclList      { Variable $1 $2 : $4 }
+  | {- empty -}                         { [] }
 
-MethodDecl
-  : public Type idliteral '(' FormalList ')' '{' VarDecl Stmt return Expr ';' '}' { $1 }
+MethodDeclList
+  : public Type idliteral '(' FormalList ')' '{' VarDeclList StmtList return Expr ';' '}' MethodDeclList
+                                        { Method $2 $3 $5 $8 $9 $11 : $14 }
+  | {- empty -}                         { [] }
 
 FormalList
-  : Type idliteral FormalRest           { $1 $2 }
-
-FormalRest
-  : ',' Type idliteral                  { $2 $3 }
+  : Type idliteral ',' FormalList       { Variable $1 $2 : $4 }
+  | Type idliteral                      { [Variable $1 $2] }
+  | {- empty -}                         { [] }
 
 Type
   : int '[' ']'                         { TypeIntegerArray }
   | boolean                             { TypeBoolean }
   | int                                 { TypeInteger }
-  | idliteral                           { $1 }
+  | idliteral                           { TypeAppDefined $1 }
 
 Stmt
-  : if '(' Expr ')' Stmt else Stmt      { StatementIf $3 $5 $7 }
+  : '{' StmtList '}'                    { StatementScope $2 }
+  | if '(' Expr ')' Stmt else Stmt      { StatementIf $3 $5 $7 }
   | while '(' Expr ')' Stmt             { StatementWhile $3 $5 }
   | print '(' Expr ')' ';'              { StatementPrint $3 }
   | idliteral '=' Expr ';'              { StatementAssignment $1 $3 }
   | idliteral '[' Expr ']' '=' Expr ';' { StatementIndexedAssignment $1 $3 $6 }
 
+StmtList 
+  : Stmt StmtList                       { $1 : $2 }
+  | {- empty -}                         { [] }
+
 Expr
-  : Expr Op Expr                        { ExprOp $1 $2 $3 }
+  : Expr Op Expr                        { ExprOp $2 $1 $3 }
   | Expr '[' Expr ']'                   { ExprList $1 $3 }
   | Expr '.' length                     { ExprLength $1 }
   | Expr '.' idliteral '(' ExpList ')'  { ExprInvocation $1 $3 $5 }
   | intliteral                          { ExprInt $1 }
   | true                                { ExprTrue }
   | false                               { ExprFalse }
-  | idliteral                           { $1 }
+  | idliteral                           { ExprIdentifier $1 }
   | this                                { ExprThis }
   | new int '[' Expr ']'                { ExprIntArray $4 }
   | new idliteral '(' ')'               { ExprNewObject $2 }
@@ -111,10 +124,9 @@ Op
   | '*'                                 { OperandMult }
 
 ExpList
-  : Expr ExprRest                       { $1 }
-
-ExprRest
-  : ',' Expr                            { $2 }
+  : Expr ExpList                        { $1 : $2 }
+  | ',' Expr ExpList                    { $2 : $3 }
+  | {- empty -}                         { [] }
 
 {
 
