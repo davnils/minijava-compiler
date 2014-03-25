@@ -118,6 +118,7 @@ checkExpression (ExprInvocation e name args) = do
   checkExpression e
   mapM_ checkExpression args
 
+  -- TODO: Should more properties be verified?
   map <- lift get
   case M.lookup name map of
     Just (TMethod _ args') -> when (length args' /= length args) fail

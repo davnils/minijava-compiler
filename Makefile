@@ -1,2 +1,2 @@
-all: ; @ghc -hide-package monads-tf --make -o mjc -isrc -O2 src/Driver.hs
+all: ; @ghc  --make -o mjc -isrc -O2 src/Driver.hs # -hide-package monads-tf
 clean: ; @rm src/*.hi src/*.o mjc &> /dev/null
