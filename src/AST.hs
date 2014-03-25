@@ -4,20 +4,20 @@ type AIdentifier = String
 
 data AProgram
   = Program [AClass]
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 data AClass
   = Class AIdentifier [AVariable] [AMethod]
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 data AVariable
   = Variable AVariableType AIdentifier
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 data AMethod
   = Method AVariableType AIdentifier [AVariable] [AVariable] [AStatement] AExpr
   | MainMethod [AVariable] [AVariable] [AStatement]
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 data AVariableType
   = TypeIntegerArray
@@ -25,7 +25,7 @@ data AVariableType
   | TypeInteger
   | TypeString
   | TypeAppDefined String
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 data AStatement
   = StatementScope [AStatement]
@@ -34,7 +34,7 @@ data AStatement
   | StatementPrint AExpr
   | StatementAssignment AIdentifier AExpr
   | StatementIndexedAssignment AIdentifier AExpr AExpr
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 data AExpr
   = ExprOp AOperand AExpr AExpr
@@ -49,7 +49,7 @@ data AExpr
   | ExprIntArray AExpr
   | ExprNewObject AIdentifier
   | ExprNegation AExpr
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 data AOperand
   = OperandLogicalAnd
@@ -57,4 +57,4 @@ data AOperand
   | OperandPlus
   | OperandMinus
   | OperandMult
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
