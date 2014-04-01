@@ -1,8 +1,9 @@
 module TypeCheck where
 
 import           Control.Monad
-import           Control.Error
+import           Data.Either (Either)
 import           Control.Monad.State
+import           Control.Monad.Trans.Either (runEitherT, EitherT, left)
 import qualified Data.Map as M
 import           Data.Monoid ((<>))
 
@@ -24,9 +25,9 @@ type MCheck = EitherT String (State (M.Map AIdentifier TypeBinding))
 
 withSnapshot :: MCheck b -> MCheck b
 withSnapshot action = do
-  snap <- get
+  snap <- lift get
   ret <- action
-  put snap
+  lift $ put snap
   return ret
 
 reserve :: AIdentifier -> TypeBinding -> MCheck ()
@@ -34,7 +35,7 @@ reserve name kind = do
   prev <- lift get
   case M.lookup name prev of
     Just val -> left $ errorMsg val
-    Nothing  -> put $ M.insert name kind prev
+    Nothing  -> lift . put $ M.insert name kind prev
   where
   errorMsg val = "Identifier '" <> name <> "'" <>
                  " already declared as type '" <> show val <> "'"
