@@ -21,9 +21,39 @@ data TypeBinding
 
 type MCheck = EitherT String (State (M.Map AIdentifier TypeBinding))
 
+-- TODO: Need to store functions and fields of classes
+--       This is needed in order to perform lookup.
+--       really hard to do solve cyclic depends with only one sweep.
+--
+-- (1) redeclaration (field/var and method dup allowed)
+-- (2) invalid type
+-- (3) invalid reference (no declaration)
+-- (4) invalid initialization (large constants)
+--
+-- class fields and methods (not local variables nor arguments) must be saved.
+-- these can be seen as interfaces.
+-- (1) build up interface map: class -> (fieldMap, methodMap)
+--     this algorithm should detect method/field duplicates (exact or dup. names)
+-- (2) verify all the conditions above
+-- 
+-- page 25 http://martijn.van.steenbergen.nl/projects/Selections.pdf
+
 -- TODO: Should field overloading be supported? Can be implmented in 'reserve'
 
-withSnapshot :: MCheck b -> MCheck b
+-- AST traversal
+--
+-- > Interface
+-- Traverse all nodes and match Class and Method.
+-- Check and add them to the global state (map: Class -> (FieldMap, MethodMap))
+type InterfaceMap = M.Map Class (M.Map Identifier (Type), M.Map Identifier (Type))
+
+--
+-- > Type check
+-- Traverse all nodes and match everything but Class and Method.
+-- Check and add them to the global state (Identifier -> Type)
+type TypeMap = M.Map Identifier Type
+
+-- withSnapshot :: MonadState a r -> MonadState a r
 withSnapshot action = do
   snap <- lift get
   ret <- action

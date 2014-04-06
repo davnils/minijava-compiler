@@ -8,6 +8,7 @@ class TheMainClass
 
 class Class2
 {
+  Class3 asd;
   public int method(int a)
   {
     return 2;
@@ -16,6 +17,7 @@ class Class2
 
 class Class3
 {
+  Class2 sample;
   public boolean method(int a, int b)
   {
     return false;

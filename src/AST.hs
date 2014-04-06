@@ -1,6 +1,13 @@
+{-# LANGUAGE GADTs #-}
 module AST where
 
 type AIdentifier = String
+
+-- GADT allowing unification into single type? nice for pattern matching
+
+{-data AST r where
+ AProgramX :: [AST Int] -> AST r
+ AClassX :: AIdentifier -> [AST r] -> [AST r'] -> AST r''-}
 
 data AProgram
   = Program [AClass]
@@ -17,14 +24,6 @@ data AVariable
 data AMethod
   = Method AVariableType AIdentifier [AVariable] [AVariable] [AStatement] AExpr
   | MainMethod [AVariable] [AVariable] [AStatement]
-  deriving (Eq, Ord, Show)
-
-data AVariableType
-  = TypeIntegerArray
-  | TypeBoolean
-  | TypeInteger
-  | TypeString
-  | TypeAppDefined String
   deriving (Eq, Ord, Show)
 
 data AStatement
@@ -49,12 +48,4 @@ data AExpr
   | ExprIntArray AExpr
   | ExprNewObject AIdentifier
   | ExprNegation AExpr
-  deriving (Eq, Ord, Show)
-
-data AOperand
-  = OperandLogicalAnd
-  | OperandLess
-  | OperandPlus
-  | OperandMinus
-  | OperandMult
   deriving (Eq, Ord, Show)
