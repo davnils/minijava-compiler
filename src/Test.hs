@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances, DeriveFunctor, DeriveFoldable, DeriveTraversable, GADTs, StandaloneDeriving, ViewPatterns #-}
+{-# LANGUAGE Rank2Types, FlexibleInstances, DeriveFunctor, DeriveFoldable, DeriveTraversable, GADTs, StandaloneDeriving, ViewPatterns #-}
 
 module Test where
 
@@ -65,10 +65,12 @@ newtype Fix f = Fix (f (Fix f))
 
 -- http://stackoverflow.com/questions/4434292/catamorphism-and-tree-traversing-in-haskell?rq=1
 
+type Algebra = (Traversable f, Monad m) => (f r -> m r)
+
 cata :: Functor f => (f r -> r) -> Fix f -> r
 cata f (Fix t) = f (cata f <$> t)
 
-cataM :: (Traversable f, Monad m) => (f r -> m r) -> Fix f -> m r
+cataM :: (Traversable f, Monad m) => Algebra -> Fix f -> m r
 cataM f (Fix t) = mapM (cataM f) t >>= f
 
 type UnnAST = Fix AEntry
@@ -80,6 +82,13 @@ type FieldEntry   = [UnnAST]
 type InterfaceMap = M.Map AId (M.Map AId MethodEntry, M.Map AId FieldEntry)
 
 type BuildM = EitherT String (State InterfaceMap) ()
+
+alg :: Monad m => AEntry t -> m (Maybe (AEntry t))
+alg (AClass name fields methods) = return Nothing
+alg entry                        = return $ Just entry
+
+-- can there be different types stored in the nodes?
+-- probably needs to polymorphic
 
 {-
 
