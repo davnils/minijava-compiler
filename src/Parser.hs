@@ -678,18 +678,18 @@ happyReduce_1 = happySpecReduce_2  4 happyReduction_1
 happyReduction_1 (HappyAbsSyn6  happy_var_2)
 	(HappyAbsSyn5  happy_var_1)
 	 =  HappyAbsSyn4
-		 (happy_var_1 : happy_var_2
+		 (Fix . AProgram $ fixMap (happy_var_1 : happy_var_2)
 	)
 happyReduction_1 _ _  = notHappyAtAll 
 
 happyReduce_2 = happyReduce 18 5 happyReduction_2
 happyReduction_2 (_ `HappyStk`
 	_ `HappyStk`
-	(HappyAbsSyn12  happy_var_16) `HappyStk`
-	(HappyAbsSyn7  happy_var_15) `HappyStk`
 	_ `HappyStk`
 	_ `HappyStk`
-	(HappyTerminal (TIdLiteral happy_var_12)) `HappyStk`
+	_ `HappyStk`
+	_ `HappyStk`
+	_ `HappyStk`
 	_ `HappyStk`
 	_ `HappyStk`
 	_ `HappyStk`
@@ -703,7 +703,7 @@ happyReduction_2 (_ `HappyStk`
 	_ `HappyStk`
 	happyRest)
 	 = HappyAbsSyn5
-		 (Class happy_var_2 [{- empty -}] [MainMethod [Variable TypeString happy_var_12] happy_var_15 happy_var_16]
+		 (AClass happy_var_2 [{- empty -}] [{- todo -}]
 	) `HappyStk` happyRest
 
 happyReduce_3 = happyReduce 7 6 happyReduction_3
@@ -716,7 +716,7 @@ happyReduction_3 ((HappyAbsSyn6  happy_var_7) `HappyStk`
 	_ `HappyStk`
 	happyRest)
 	 = HappyAbsSyn6
-		 (Class happy_var_2 happy_var_4 happy_var_5 : happy_var_7
+		 (AClass happy_var_2 (fixMap happy_var_4) (fixMap happy_var_5) : happy_var_7
 	) `HappyStk` happyRest
 
 happyReduce_4 = happySpecReduce_0  6 happyReduction_4
@@ -731,7 +731,7 @@ happyReduction_5 ((HappyAbsSyn7  happy_var_4) `HappyStk`
 	(HappyAbsSyn10  happy_var_1) `HappyStk`
 	happyRest)
 	 = HappyAbsSyn7
-		 (Variable happy_var_1 happy_var_2 : happy_var_4
+		 (AVar happy_var_1 happy_var_2 : happy_var_4
 	) `HappyStk` happyRest
 
 happyReduce_6 = happySpecReduce_0  7 happyReduction_6
@@ -756,7 +756,7 @@ happyReduction_7 ((HappyAbsSyn8  happy_var_14) `HappyStk`
 	_ `HappyStk`
 	happyRest)
 	 = HappyAbsSyn8
-		 (Method happy_var_2 happy_var_3 happy_var_5 happy_var_8 happy_var_9 happy_var_11 : happy_var_14
+		 (AMethod happy_var_2 happy_var_3 (fixMap happy_var_5) (fixMap happy_var_8) (fixMap happy_var_9) (Fix happy_var_11) : happy_var_14
 	) `HappyStk` happyRest
 
 happyReduce_8 = happySpecReduce_0  8 happyReduction_8
@@ -771,14 +771,14 @@ happyReduction_9 ((HappyAbsSyn9  happy_var_4) `HappyStk`
 	(HappyAbsSyn10  happy_var_1) `HappyStk`
 	happyRest)
 	 = HappyAbsSyn9
-		 (Variable happy_var_1 happy_var_2 : happy_var_4
+		 (AVar happy_var_1 happy_var_2 : happy_var_4
 	) `HappyStk` happyRest
 
 happyReduce_10 = happySpecReduce_2  9 happyReduction_10
 happyReduction_10 (HappyTerminal (TIdLiteral happy_var_2))
 	(HappyAbsSyn10  happy_var_1)
 	 =  HappyAbsSyn9
-		 ([Variable happy_var_1 happy_var_2]
+		 ([AVar happy_var_1 happy_var_2]
 	)
 happyReduction_10 _ _  = notHappyAtAll 
 
@@ -819,7 +819,7 @@ happyReduction_16 _
 	(HappyAbsSyn12  happy_var_2)
 	_
 	 =  HappyAbsSyn11
-		 (StatementScope happy_var_2
+		 (AStatScope (fixMap happy_var_2)
 	)
 happyReduction_16 _ _ _  = notHappyAtAll 
 
@@ -833,7 +833,7 @@ happyReduction_17 ((HappyAbsSyn11  happy_var_7) `HappyStk`
 	_ `HappyStk`
 	happyRest)
 	 = HappyAbsSyn11
-		 (StatementIf happy_var_3 happy_var_5 happy_var_7
+		 (AIf (Fix happy_var_3) (Fix happy_var_5) (Fix happy_var_7)
 	) `HappyStk` happyRest
 
 happyReduce_18 = happyReduce 5 11 happyReduction_18
@@ -844,7 +844,7 @@ happyReduction_18 ((HappyAbsSyn11  happy_var_5) `HappyStk`
 	_ `HappyStk`
 	happyRest)
 	 = HappyAbsSyn11
-		 (StatementWhile happy_var_3 happy_var_5
+		 (AWhile (Fix happy_var_3) (Fix happy_var_5)
 	) `HappyStk` happyRest
 
 happyReduce_19 = happyReduce 5 11 happyReduction_19
@@ -855,7 +855,7 @@ happyReduction_19 (_ `HappyStk`
 	_ `HappyStk`
 	happyRest)
 	 = HappyAbsSyn11
-		 (StatementPrint happy_var_3
+		 (APrint (Fix happy_var_3)
 	) `HappyStk` happyRest
 
 happyReduce_20 = happyReduce 4 11 happyReduction_20
@@ -865,7 +865,7 @@ happyReduction_20 (_ `HappyStk`
 	(HappyTerminal (TIdLiteral happy_var_1)) `HappyStk`
 	happyRest)
 	 = HappyAbsSyn11
-		 (StatementAssignment happy_var_1 happy_var_3
+		 (AAssignment happy_var_1 (Fix happy_var_3)
 	) `HappyStk` happyRest
 
 happyReduce_21 = happyReduce 7 11 happyReduction_21
@@ -878,7 +878,7 @@ happyReduction_21 (_ `HappyStk`
 	(HappyTerminal (TIdLiteral happy_var_1)) `HappyStk`
 	happyRest)
 	 = HappyAbsSyn11
-		 (StatementIndexedAssignment happy_var_1 happy_var_3 happy_var_6
+		 (AIndexedAssignment happy_var_1 (Fix happy_var_3) (Fix happy_var_6)
 	) `HappyStk` happyRest
 
 happyReduce_22 = happySpecReduce_2  12 happyReduction_22
@@ -899,7 +899,7 @@ happyReduction_24 (HappyAbsSyn13  happy_var_3)
 	(HappyAbsSyn14  happy_var_2)
 	(HappyAbsSyn13  happy_var_1)
 	 =  HappyAbsSyn13
-		 (ExprOp happy_var_2 happy_var_1 happy_var_3
+		 (AExprOp happy_var_2 (Fix happy_var_1) (Fix happy_var_3)
 	)
 happyReduction_24 _ _ _  = notHappyAtAll 
 
@@ -910,7 +910,7 @@ happyReduction_25 (_ `HappyStk`
 	(HappyAbsSyn13  happy_var_1) `HappyStk`
 	happyRest)
 	 = HappyAbsSyn13
-		 (ExprList happy_var_1 happy_var_3
+		 (AExprList (Fix happy_var_1) (Fix happy_var_3)
 	) `HappyStk` happyRest
 
 happyReduce_26 = happySpecReduce_3  13 happyReduction_26
@@ -918,7 +918,7 @@ happyReduction_26 _
 	_
 	(HappyAbsSyn13  happy_var_1)
 	 =  HappyAbsSyn13
-		 (ExprLength happy_var_1
+		 (AExprLength (Fix happy_var_1)
 	)
 happyReduction_26 _ _ _  = notHappyAtAll 
 
@@ -931,39 +931,39 @@ happyReduction_27 (_ `HappyStk`
 	(HappyAbsSyn13  happy_var_1) `HappyStk`
 	happyRest)
 	 = HappyAbsSyn13
-		 (ExprInvocation happy_var_1 happy_var_3 happy_var_5
+		 (AExprInvocation (Fix happy_var_1) happy_var_3 (fixMap happy_var_5)
 	) `HappyStk` happyRest
 
 happyReduce_28 = happySpecReduce_1  13 happyReduction_28
 happyReduction_28 (HappyTerminal (TIntLiteral  happy_var_1))
 	 =  HappyAbsSyn13
-		 (ExprInt happy_var_1
+		 (AExprInt happy_var_1
 	)
 happyReduction_28 _  = notHappyAtAll 
 
 happyReduce_29 = happySpecReduce_1  13 happyReduction_29
 happyReduction_29 _
 	 =  HappyAbsSyn13
-		 (ExprTrue
+		 (AExprTrue
 	)
 
 happyReduce_30 = happySpecReduce_1  13 happyReduction_30
 happyReduction_30 _
 	 =  HappyAbsSyn13
-		 (ExprFalse
+		 (AExprFalse
 	)
 
 happyReduce_31 = happySpecReduce_1  13 happyReduction_31
 happyReduction_31 (HappyTerminal (TIdLiteral happy_var_1))
 	 =  HappyAbsSyn13
-		 (ExprIdentifier happy_var_1
+		 (AExprIdentifier happy_var_1
 	)
 happyReduction_31 _  = notHappyAtAll 
 
 happyReduce_32 = happySpecReduce_1  13 happyReduction_32
 happyReduction_32 _
 	 =  HappyAbsSyn13
-		 (ExprThis
+		 (AExprThis
 	)
 
 happyReduce_33 = happyReduce 5 13 happyReduction_33
@@ -974,7 +974,7 @@ happyReduction_33 (_ `HappyStk`
 	_ `HappyStk`
 	happyRest)
 	 = HappyAbsSyn13
-		 (ExprIntArray happy_var_4
+		 (AExprIntArray (Fix happy_var_4)
 	) `HappyStk` happyRest
 
 happyReduce_34 = happyReduce 4 13 happyReduction_34
@@ -984,14 +984,14 @@ happyReduction_34 (_ `HappyStk`
 	_ `HappyStk`
 	happyRest)
 	 = HappyAbsSyn13
-		 (ExprNewObject happy_var_2
+		 (AExprNewObject happy_var_2
 	) `HappyStk` happyRest
 
 happyReduce_35 = happySpecReduce_2  13 happyReduction_35
 happyReduction_35 (HappyAbsSyn13  happy_var_2)
 	_
 	 =  HappyAbsSyn13
-		 (ExprNegation happy_var_2
+		 (AExprNegation (Fix happy_var_2)
 	)
 happyReduction_35 _ _  = notHappyAtAll 
 
@@ -1130,6 +1130,8 @@ parseMiniJava tks = happyRunIdentity happySomeParser where
 
 happySeq = happyDontSeq
 
+
+fixMap = map Fix
 
 parserError :: [Token] -> a
 parserError tokens = error $ "Parse error, left over: " ++ concatMap show tokens

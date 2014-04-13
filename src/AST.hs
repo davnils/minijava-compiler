@@ -1,51 +1,55 @@
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable, UndecidableInstances #-}
+
 module AST where
 
-type AIdentifier = String
+import           Data.Foldable (Foldable)
+import           Data.Traversable (Traversable)
 
--- GADT allowing unification into single type? nice for pattern matching
+type AId = String
 
-{-data AST r where
- AProgramX :: [AST Int] -> AST r
- AClassX :: AIdentifier -> [AST r] -> [AST r'] -> AST r''-}
+data AEntry t
+  = AProgram           [t]
+  | AClass             AId [t] [t]
+  | AVar               AVarType AId
+  | AMethod            AVarType AId [t] [t] [t] t -- retType name args vars code retExpr
+  | AStatScope         [t]
+  | AIf                t t t
+  | AWhile             t t
+  | APrint             t
+  | AAssignment        AId t
+  | AIndexedAssignment AId t t
+  | AExprOp            AOperand t t
+  | AExprList          t t
+  | AExprLength        t
+  | AExprInvocation    t AId [t]
+  | AExprInt           Int
+  | AExprTrue
+  | AExprFalse
+  | AExprIdentifier    AId
+  | AExprThis
+  | AExprIntArray      t
+  | AExprNewObject     AId
+  | AExprNegation      t
+  deriving (Functor, Foldable, Show, Traversable)
 
-data AProgram
-  = Program [AClass]
+data AVarType
+  = TypeIntegerArray
+  | TypeBoolean
+  | TypeInteger
+  | TypeString
+  | TypeAppDefined String
+  | TypeVoid
   deriving (Eq, Ord, Show)
 
-data AClass
-  = Class AIdentifier [AVariable] [AMethod]
+data AOperand
+  = OperandLogicalAnd
+  | OperandLess
+  | OperandPlus
+  | OperandMinus
+  | OperandMult
   deriving (Eq, Ord, Show)
 
-data AVariable
-  = Variable AVariableType AIdentifier
-  deriving (Eq, Ord, Show)
+newtype Fix f = Fix (f (Fix f))
 
-data AMethod
-  = Method AVariableType AIdentifier [AVariable] [AVariable] [AStatement] AExpr
-  | MainMethod [AVariable] [AVariable] [AStatement]
-  deriving (Eq, Ord, Show)
-
-data AStatement
-  = StatementScope [AStatement]
-  | StatementIf AExpr AStatement AStatement
-  | StatementWhile AExpr AStatement
-  | StatementPrint AExpr
-  | StatementAssignment AIdentifier AExpr
-  | StatementIndexedAssignment AIdentifier AExpr AExpr
-  deriving (Eq, Ord, Show)
-
-data AExpr
-  = ExprOp AOperand AExpr AExpr
-  | ExprList AExpr AExpr
-  | ExprLength AExpr
-  | ExprInvocation AExpr AIdentifier [AExpr]
-  | ExprInt Int
-  | ExprTrue
-  | ExprFalse
-  | ExprIdentifier AIdentifier
-  | ExprThis
-  | ExprIntArray AExpr
-  | ExprNewObject AIdentifier
-  | ExprNegation AExpr
-  deriving (Eq, Ord, Show)
+instance (Show (f (Fix f))) => Show (Fix f) where
+  showsPrec p (Fix f) = showsPrec p f

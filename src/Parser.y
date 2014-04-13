@@ -58,29 +58,30 @@ import Lexer
 %%
 
 Program
-  : MainClass ClassDeclList             { $1 : $2 }
+  : MainClass ClassDeclList             { Fix . AProgram $ fixMap ($1 : $2) }
 
 MainClass
   : class idliteral '{' public static void main '(' string '[' ']' idliteral ')' '{' VarDeclList StmtList '}' '}'
-                                        { Class $2 [{- empty -}] [MainMethod [Variable TypeString $12] $15 $16] }
+                                        { AClass $2 [{- empty -}] [{- todo -}] }
+-- Fix $ AMethod TypeVoid [Fix $ AVar TypeString $12] $15 $16
 
 ClassDeclList
   : class idliteral '{' VarDeclList MethodDeclList '}' ClassDeclList
-                                        { Class $2 $4 $5 : $7}
+                                        { AClass $2 (fixMap $4) (fixMap $5) : $7}
   | {- empty -}                         { [] }
 
 VarDeclList
-  : Type idliteral ';' VarDeclList      { Variable $1 $2 : $4 }
+  : Type idliteral ';' VarDeclList      { AVar $1 $2 : $4 }
   | {- empty -}                         { [] }
 
 MethodDeclList
   : public Type idliteral '(' FormalList ')' '{' VarDeclList StmtList return Expr ';' '}' MethodDeclList
-                                        { Method $2 $3 $5 $8 $9 $11 : $14 }
+                                        { AMethod $2 $3 (fixMap $5) (fixMap $8) (fixMap $9) (Fix $11) : $14 }
   | {- empty -}                         { [] }
 
 FormalList
-  : Type idliteral ',' FormalList       { Variable $1 $2 : $4 }
-  | Type idliteral                      { [Variable $1 $2] }
+  : Type idliteral ',' FormalList       { AVar $1 $2 : $4 }
+  | Type idliteral                      { [AVar $1 $2] }
   | {- empty -}                         { [] }
 
 Type
@@ -90,30 +91,30 @@ Type
   | idliteral                           { TypeAppDefined $1 }
 
 Stmt
-  : '{' StmtList '}'                    { StatementScope $2 }
-  | if '(' Expr ')' Stmt else Stmt      { StatementIf $3 $5 $7 }
-  | while '(' Expr ')' Stmt             { StatementWhile $3 $5 }
-  | print '(' Expr ')' ';'              { StatementPrint $3 }
-  | idliteral '=' Expr ';'              { StatementAssignment $1 $3 }
-  | idliteral '[' Expr ']' '=' Expr ';' { StatementIndexedAssignment $1 $3 $6 }
+  : '{' StmtList '}'                    { AStatScope (fixMap $2) }
+  | if '(' Expr ')' Stmt else Stmt      { AIf (Fix $3) (Fix $5) (Fix $7) }
+  | while '(' Expr ')' Stmt             { AWhile (Fix $3) (Fix $5) }
+  | print '(' Expr ')' ';'              { APrint (Fix $3) }
+  | idliteral '=' Expr ';'              { AAssignment $1 (Fix $3) }
+  | idliteral '[' Expr ']' '=' Expr ';' { AIndexedAssignment $1 (Fix $3) (Fix $6) }
 
 StmtList 
   : Stmt StmtList                       { $1 : $2 }
   | {- empty -}                         { [] }
 
 Expr
-  : Expr Op Expr                        { ExprOp $2 $1 $3 }
-  | Expr '[' Expr ']'                   { ExprList $1 $3 }
-  | Expr '.' length                     { ExprLength $1 }
-  | Expr '.' idliteral '(' ExpList ')'  { ExprInvocation $1 $3 $5 }
-  | intliteral                          { ExprInt $1 }
-  | true                                { ExprTrue }
-  | false                               { ExprFalse }
-  | idliteral                           { ExprIdentifier $1 }
-  | this                                { ExprThis }
-  | new int '[' Expr ']'                { ExprIntArray $4 }
-  | new idliteral '(' ')'               { ExprNewObject $2 }
-  | '!' Expr                            { ExprNegation $2 }
+  : Expr Op Expr                        { AExprOp $2 (Fix $1) (Fix $3) }
+  | Expr '[' Expr ']'                   { AExprList (Fix $1) (Fix $3) }
+  | Expr '.' length                     { AExprLength (Fix $1) }
+  | Expr '.' idliteral '(' ExpList ')'  { AExprInvocation (Fix $1) $3 (fixMap $5) }
+  | intliteral                          { AExprInt $1 }
+  | true                                { AExprTrue }
+  | false                               { AExprFalse }
+  | idliteral                           { AExprIdentifier $1 }
+  | this                                { AExprThis }
+  | new int '[' Expr ']'                { AExprIntArray (Fix $4) }
+  | new idliteral '(' ')'               { AExprNewObject $2 }
+  | '!' Expr                            { AExprNegation (Fix $2) }
   | '(' Expr ')'                        { $2 }
 
 Op
@@ -131,6 +132,8 @@ ExpRest
   | {- empty -}                         { [] }
 
 {
+
+fixMap = map Fix
 
 parserError :: [Token] -> a
 parserError tokens = error $ "Parse error, left over: " ++ concatMap show tokens

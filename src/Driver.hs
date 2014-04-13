@@ -10,4 +10,4 @@ main = do
   input <- getContents
   let tokens = alexScanTokens input
   print $ tokens
-  print . checkAST . Program . parseMiniJava . map fst $ tokens
+  print . parseMiniJava . map fst $ tokens
