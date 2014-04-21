@@ -24,6 +24,7 @@ class Class3
     boolean d;
     int [] other;
     other = new int[2];
+    other[2] = 2147483647;
 
     return other[12] < 2;
   }

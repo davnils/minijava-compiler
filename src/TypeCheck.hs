@@ -137,7 +137,7 @@ check (AIndexedAssignment (Fix name) (Fix e1) (Fix e2)) = do
     left $ "Invalid [] access to non-array variable " <> show name
     
   innerType <- check e1
-  when (outerType /= TypeInteger) $
+  when (innerType /= TypeInteger) $
     left $ "Invalid non-integer index into variable " <> show name
     
   asssnType <- check e2
@@ -196,7 +196,12 @@ check (AExprInvocation (Fix expr) name args) = do
       when (types /= iArgs) $ left "Invalid type(s) of method argument."
       return iRet
 
-check (AExprInt _) = return TypeInteger
+check (AExprInt i) = do
+  when (i > maxInt) $
+    left $ "Integer literal out of range: " <> show i
+  return TypeInteger
+  where
+  maxInt = 2 ^ 31 - 1
 
 check AExprTrue = return TypeBoolean
 
