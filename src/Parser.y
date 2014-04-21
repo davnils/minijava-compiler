@@ -48,22 +48,25 @@ import Lexer
   ']'                         { TRightBracket      }
   '{'                         { TLeftBrace         }
   '}'                         { TRightBrace        }
-  singlecomment               { TSingleLineComment }
-  multicomment                { TMultiLineComment  }
 
   idliteral                   { TIdLiteral $$      }
-  longliteral                 { TLongLiteral $$    }
   intliteral                  { TIntLiteral  $$    }
 
 %%
+
+-- problem: need to parse the following
+-- Type name; ...
+-- Statement; ...
+--
+-- where Statement might be String = ..;
+-- and vardecl might be String name;
 
 Program
   : MainClass ClassDeclList             { Fix . AProgram $ fixMap ($1 : $2) }
 
 MainClass
   : class idliteral '{' public static void main '(' string '[' ']' idliteral ')' '{' VarDeclList StmtList '}' '}'
-                                        { AClass $2 [{- empty -}] [{- todo -}] }
--- Fix $ AMethod TypeVoid [Fix $ AVar TypeString $12] $15 $16
+                                        { AClass $2 [] [Fix $ mainMethod $12 $15 $16] }
 
 ClassDeclList
   : class idliteral '{' VarDeclList MethodDeclList '}' ClassDeclList
@@ -71,8 +74,8 @@ ClassDeclList
   | {- empty -}                         { [] }
 
 VarDeclList
-  : Type idliteral ';' VarDeclList      { AVar $1 $2 : $4 }
-  | {- empty -}                         { [] }
+  : {- empty -}                         { [] }
+  | VarDeclList Type idliteral ';'      { $1 ++ [AVar $2 $3] }
 
 MethodDeclList
   : public Type idliteral '(' FormalList ')' '{' VarDeclList StmtList return Expr ';' '}' MethodDeclList
@@ -95,8 +98,8 @@ Stmt
   | if '(' Expr ')' Stmt else Stmt      { AIf (Fix $3) (Fix $5) (Fix $7) }
   | while '(' Expr ')' Stmt             { AWhile (Fix $3) (Fix $5) }
   | print '(' Expr ')' ';'              { APrint (Fix $3) }
-  | idliteral '=' Expr ';'              { AAssignment $1 (Fix $3) }
-  | idliteral '[' Expr ']' '=' Expr ';' { AIndexedAssignment $1 (Fix $3) (Fix $6) }
+  | idliteral '=' Expr ';'              { AAssignment (Fix $ AExprIdentifier $1) (Fix $3) }
+  | idliteral '[' Expr ']' '=' Expr ';' { AIndexedAssignment (Fix $ AExprIdentifier $1) (Fix $3) (Fix $6) }
 
 StmtList 
   : Stmt StmtList                       { $1 : $2 }
@@ -132,6 +135,8 @@ ExpRest
   | {- empty -}                         { [] }
 
 {
+
+mainMethod arg vars code = AMethod TypeVoid "main" [Fix $ AVar TypeString arg] (fixMap vars) (fixMap code) (Fix AExprVoid)
 
 fixMap = map Fix
 

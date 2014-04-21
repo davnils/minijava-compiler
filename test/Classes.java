@@ -8,8 +8,7 @@ class TheMainClass
 
 class Class2
 {
-  Class3 asd;
-  public int method(int a)
+  public int testa(int a)
   {
     return 2;
   }
@@ -18,8 +17,14 @@ class Class2
 class Class3
 {
   Class2 sample;
+  boolean d;
+
   public boolean method(int a, int b)
   {
-    return false;
+    boolean d;
+    int [] other;
+    other = new int[2];
+
+    return other[12] < 2;
   }
 }

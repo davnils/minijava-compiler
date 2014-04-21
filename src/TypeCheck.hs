@@ -1,3 +1,5 @@
+{-# LANGUAGE NoMonomorphismRestriction, ScopedTypeVariables, TupleSections #-}
+
 module TypeCheck where
 
 import           Control.Monad
@@ -8,167 +10,219 @@ import qualified Data.Map as M
 import           Data.Monoid ((<>))
 
 import AST
+import Interface
 
-checkAST :: AProgram -> Either String ()
-checkAST tree = evalState (runEitherT $ checkProgram tree) M.empty
+checkAST :: UnnAST -> Either String ()
+checkAST (Fix ast) = do
+  interfaces <- return $ buildInterface (Fix ast)
+  case interfaces of
+    Just interfaces' -> do
+      let state = (M.empty, Nothing, interfaces')
+      evalState (runEitherT . void $ check ast) state
+    Nothing         -> do
+      fail "Failed to build class interface"
 
-data TypeBinding
-  = TClass
-  | TMethod AVariableType [AVariableType]
-  | TVar AVariableType
-  deriving
-  (Eq, Ord, Show)
+type CheckState = (M.Map AId AVarType, Maybe (AId, InterfaceEntry), InterfaceMap)
+type MCheck = EitherT String (State CheckState)
 
-type MCheck = EitherT String (State (M.Map AIdentifier TypeBinding))
-
--- TODO: Need to store functions and fields of classes
---       This is needed in order to perform lookup.
---       really hard to do solve cyclic depends with only one sweep.
---
--- (1) redeclaration (field/var and method dup allowed)
--- (2) invalid type
--- (3) invalid reference (no declaration)
--- (4) invalid initialization (large constants)
---
--- class fields and methods (not local variables nor arguments) must be saved.
--- these can be seen as interfaces.
--- (1) build up interface map: class -> (fieldMap, methodMap)
---     this algorithm should detect method/field duplicates (exact or dup. names)
--- (2) verify all the conditions above
--- 
--- page 25 http://martijn.van.steenbergen.nl/projects/Selections.pdf
-
--- TODO: Should field overloading be supported? Can be implmented in 'reserve'
-
--- AST traversal
---
--- > Interface
--- Traverse all nodes and match Class and Method.
--- Check and add them to the global state (map: Class -> (FieldMap, MethodMap))
-type InterfaceMap = M.Map Class (M.Map Identifier (Type), M.Map Identifier (Type))
-
---
--- > Type check
--- Traverse all nodes and match everything but Class and Method.
--- Check and add them to the global state (Identifier -> Type)
-type TypeMap = M.Map Identifier Type
-
--- withSnapshot :: MonadState a r -> MonadState a r
 withSnapshot action = do
   snap <- lift get
   ret <- action
   lift $ put snap
   return ret
 
-reserve :: AIdentifier -> TypeBinding -> MCheck ()
+reserve :: AId -> AVarType -> MCheck ()
 reserve name kind = do
-  prev <- lift get
+  (prev, _, _) <- lift get
   case M.lookup name prev of
     Just val -> left $ errorMsg val
-    Nothing  -> lift . put $ M.insert name kind prev
+    Nothing  -> lift . modify $ \(_, _2, _3) -> (M.insert name kind prev, _2, _3)
   where
   errorMsg val = "Identifier '" <> name <> "'" <>
                  " already declared as type '" <> show val <> "'"
 
-checkPredicate :: (Bool -> Bool) -> AIdentifier -> Maybe TypeBinding -> MCheck ()
-checkPredicate pred name kind = do
-  -- TODO: implement kind checking
-  prev <- lift get
-  when (pred $ M.lookup name prev == Nothing) (left errorMsg)
-  where
-  errorMsg = "Identifier '" <> name <> "' does not exist"
+unFix (Fix f) = f
+mapUnfix = map unFix
+
+getVarType :: AId -> MCheck AVarType
+getVarType name = do
+  (locals, (Just (_, (interface, _))), _3) <- get
+  case (M.lookup name $ M.union locals interface) of
+    Nothing -> left $ "Invalid variable reference '" <> name <> "'"
+    Just t  -> return t
+
+check :: AEntry UnnAST -> MCheck AVarType
 
 ------------------- Programs ------------------- 
 
-checkProgram (Program classes) = mapM_ (checkClass) classes
+check (AProgram classes) = mapM_ (check . unFix) classes >> return TypeVoid
 
 ------------------- Classes ------------------- 
 
-checkClass (Class name vars methods) = do
-  reserve name TClass
-  withSnapshot $ do
-    mapM_ checkVariable vars
-    mapM_ checkMethod methods
+check (AClass name _ methods) = do
+  (_, _, interface) <- get
+  let Just interface' = M.lookup name interface
+  modify $ \(_1, _, _3) -> (_1, Just (name, interface'), _3)
 
-checkVariable (Variable kind name) = reserve name (TVar kind)
+  mapM_ (check . unFix) methods
+
+  modify $ \(_1, _, _3) -> (_1, Nothing, _3)
+  return TypeVoid
+
+check (AVar kind name) = reserve name kind >> return TypeVoid
 
 ------------------- Methods ------------------- 
 
-checkMethod (Method ret name args vars code retCode) = do
-  reserve name $ TMethod ret $ map (\(Variable kind _) -> kind) args
-  withSnapshot $ do
-    mapM_ checkVariable $ args <> vars
-    mapM_ checkStatement code
-    checkExpression retCode
-    -- TODO: check return type?
-
-checkMethod (MainMethod args vars code) = do
-  reserve "main" $ TMethod undefined undefined -- TODO
-  withSnapshot $ do
-    mapM_ checkVariable $ args <> vars
-    mapM_ checkStatement code
+check (AMethod refRet name args vars code (Fix retExpr)) = withSnapshot $ do
+  mapM_ check $ (mapUnfix args) <> (mapUnfix vars)
+  mapM_ (check . unFix) code
+  inferredRet <- check retExpr
+  when (inferredRet /= refRet) $ 
+    left $ "Invalid type of return expression (" <>
+            show refRet <> " indicated, " <>
+            show inferredRet <> " used)"
+  return TypeVoid
 
 ------------------- Statements ------------------- 
 
-checkStatement (StatementScope s) = mapM_ checkStatement s
+check (AStatScope s) = withSnapshot $ do
+  forM_ s $ \(Fix s') -> do
+    statType <- check s'
+    when (statType /= TypeVoid) $
+      left $ "Invalid statement in scope block"
 
-checkStatement (StatementIf guard s1 s2) = withSnapshot $ do
-  checkExpression guard
-  checkStatement s1
-  checkStatement s2
+  return TypeVoid
 
-checkStatement (StatementWhile guard s) = withSnapshot $ do
-  checkExpression guard
-  checkStatement s
+check (AIf (Fix guard) (Fix s1) (Fix s2)) = withSnapshot $ do
+  guardType <- check guard
+  when (guardType /= TypeBoolean) $
+    left $ "Non-boolean type of guard in if-statement"
 
-checkStatement (StatementPrint e) = withSnapshot $ do
-  checkExpression e
+  forM_ [s1, s2] $ \body -> do
+    bodyType <- check body
+    when (bodyType /= TypeVoid) $
+      left $ "Invalid statement body in if-statement"
 
-checkStatement (StatementAssignment name e) = withSnapshot $ do
-  checkExpression e
-  checkPredicate id name (Just $ TVar TypeInteger)
+  return TypeVoid
 
-checkStatement (StatementIndexedAssignment name e1 e2) = withSnapshot $ do
-  checkExpression e1
-  checkExpression e2
-  checkPredicate id name Nothing
+check (AWhile (Fix guard) (Fix s)) = withSnapshot $ do
+  guardType <- check guard
+  when (guardType /= TypeBoolean) $
+    left $ "Non-boolean type of guard in while-statement"
+
+  bodyType <- check s
+  when (bodyType /= TypeVoid) $
+    left $ "Invalid loop body in while-statement"
+
+  return TypeVoid
+
+check (APrint (Fix e)) = do
+  inner <- check e
+  when (inner == TypeVoid) $
+    left "Invalid print call on void type"
+  
+  return $ TypeVoid
+
+check (AAssignment (Fix name) (Fix e)) = do
+  outerType <- check name
+  asssnType <- check e
+  when (outerType /= asssnType) $
+    left $ "Assignment with incompatible types, variable " <> show name
+
+  return TypeVoid
+
+check (AIndexedAssignment (Fix name) (Fix e1) (Fix e2)) = do
+  outerType <- check name
+  when (outerType /= TypeIntegerArray) $
+    left $ "Invalid [] access to non-array variable " <> show name
+    
+  innerType <- check e1
+  when (outerType /= TypeInteger) $
+    left $ "Invalid non-integer index into variable " <> show name
+    
+  asssnType <- check e2
+  when (asssnType /= TypeInteger) $
+    left $ "Invalid non-integer assignment into variable " <> show name
+
+  return TypeVoid
 
 ------------------- Expressions ------------------- 
 
-checkExpression (ExprOp op e1 e2) = do
-  checkExpression e1
-  checkExpression e2
-
-checkExpression (ExprList e1 e2) = do
-  checkExpression e1
-  checkExpression e2
-
-checkExpression (ExprLength e) = checkExpression e
-
-checkExpression (ExprInvocation e name args) = do
-  checkExpression e
-  mapM_ checkExpression args
-
-  -- TODO: Should more properties be verified?
-  map <- lift get
-  case M.lookup name map of
-    Just (TMethod _ args') -> when (length args' /= length args) fail
-    _                      -> fail
+check (AExprOp op (Fix e1) (Fix e2)) = do
+  t1 <- check e1
+  t2 <- check e2
+  inf op t1 t2
   where
-  fail = left $ "Invalid call to method '" <> name <> "'"
+  inf OperandLess       TypeInteger TypeInteger = return $ TypeBoolean
+  inf OperandLogicalAnd TypeBoolean TypeBoolean = return $ TypeBoolean
+  inf _                 TypeInteger TypeInteger = return $ TypeInteger
+  inf _                 t1          t2          = left   $ 
+    "Invalid operator '" <> show op <> "'" <>
+    " on types " <> show t1 <> " and " <> show t2
 
-checkExpression (ExprInt _) = return ()
+check (AExprList (Fix e1) (Fix e2)) = do
+  outerType <- check e1
+  when (outerType /= TypeIntegerArray) $
+    left "Invalid [] operation on non-array type"
 
-checkExpression ExprTrue = return ()
+  innerType <- check e2
+  when (innerType /= TypeInteger) $
+    left "Invalid expression of type in [] operation"
 
-checkExpression ExprFalse = return ()
+  return TypeInteger
 
-checkExpression (ExprIdentifier name) = checkPredicate id name Nothing
+check (AExprLength e) = do
+ exprType <- check $ unFix e
+ when (exprType /= TypeIntegerArray) $
+   left "Invalid .length access to non-array type"
+ return TypeInteger
 
-checkExpression ExprThis = return ()
+check (AExprInvocation (Fix expr) name args) = do
+  -- validate object reference
+  exprType <- check expr
+  className <- case exprType of
+    TypeAppDefined className -> return $ className
+    t                        -> left $ "Invalid method-invocation on type: " <> show t
 
-checkExpression (ExprIntArray e) = checkExpression e
+  -- lookup method in interface map
+  (_, _, interfaces) <- get
+  let methodRef = M.lookup className interfaces >>=  M.lookup name . snd
 
-checkExpression (ExprNewObject name) = checkPredicate not name Nothing
+  -- validate inferred argument types
+  case methodRef of
+    Nothing            -> left $ "Invalid method reference"
+    Just (iRet, iArgs) -> do
+      types <- mapM (check . unFix) args
+      when (types /= iArgs) $ left "Invalid type(s) of method argument."
+      return iRet
 
-checkExpression (ExprNegation e) = checkExpression e
+check (AExprInt _) = return TypeInteger
+
+check AExprTrue = return TypeBoolean
+
+check AExprFalse = return TypeBoolean
+
+check (AExprIdentifier name) = do
+  (scope, _, _) <- get
+  case M.lookup name scope of
+    Nothing -> left $ "Undeclared identifier: " <> name
+    Just t  -> return t
+
+check AExprThis = do
+  (_, Just (thisClass, _), _) <- get
+  return $ TypeAppDefined thisClass
+
+check (AExprIntArray (Fix e)) = do
+  subExpr <- check e
+  when (subExpr /= TypeInteger) $ left "Invalid subexpr in new int []"
+  return TypeIntegerArray
+
+check (AExprNewObject name) = do
+  (_, _, interfaces) <- get
+  case M.lookup name interfaces of
+    Nothing -> left $ "Missing class decleration of " <> name
+    Just _  -> return $ TypeAppDefined name
+
+check (AExprNegation (Fix e)) = check e
+
+check AExprVoid = return TypeVoid

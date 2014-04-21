@@ -54,8 +54,6 @@ tokens :-
   "/*"[\x00-\x10ffff]*"*/"      {tag' TMultiLineComment         }
 
   [$alpha _][$alpha $digit _]*  {tag $ TIdLiteral               }
-  0[lL]                         {tag $ TLongLiteral . readLong  }
-  [1-9]$digit*[lL]              {tag $ TLongLiteral . readLong  }
   0                             {tag $ TIntLiteral  . read      }
   [1-9]$digit*                  {tag $ TIntLiteral  . read      }
 
@@ -77,7 +75,6 @@ data Token
 
  | TIdLiteral String
  | TIntLiteral Int
- | TLongLiteral Int
 
  | TVoid
  | TString

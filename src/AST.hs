@@ -16,12 +16,12 @@ data AEntry t
   | AIf                t t t
   | AWhile             t t
   | APrint             t
-  | AAssignment        AId t
-  | AIndexedAssignment AId t t
+  | AAssignment        t t
+  | AIndexedAssignment t t t
   | AExprOp            AOperand t t
   | AExprList          t t
   | AExprLength        t
-  | AExprInvocation    t AId [t]
+  | AExprInvocation    t AId [t]                  -- expression, method name, args
   | AExprInt           Int
   | AExprTrue
   | AExprFalse
@@ -30,6 +30,7 @@ data AEntry t
   | AExprIntArray      t
   | AExprNewObject     AId
   | AExprNegation      t
+  | AExprVoid
   deriving (Functor, Foldable, Show, Traversable)
 
 data AVarType
@@ -37,7 +38,7 @@ data AVarType
   | TypeBoolean
   | TypeInteger
   | TypeString
-  | TypeAppDefined String
+  | TypeAppDefined AId
   | TypeVoid
   deriving (Eq, Ord, Show)
 
@@ -53,3 +54,8 @@ newtype Fix f = Fix (f (Fix f))
 
 instance (Show (f (Fix f))) => Show (Fix f) where
   showsPrec p (Fix f) = showsPrec p f
+
+type UnnAST = Fix AEntry
+
+view :: UnnAST -> AEntry UnnAST
+view (Fix e) = e
