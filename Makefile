@@ -6,4 +6,4 @@ all:
 clean:
 	@find . -name "*.o" -delete
 	@find . -name "*.hi" -delete
-	@rm mjc &> /dev/null
+	@rm mjc *.s &> /dev/null

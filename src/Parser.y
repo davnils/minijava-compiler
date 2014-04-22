@@ -141,6 +141,6 @@ mainMethod arg vars code = AMethod TypeVoid "main" [Fix $ AVar TypeString arg] 
 fixMap = map Fix
 
 parserError :: [Token] -> a
-parserError tokens = error $ "Parse error, left over: " ++ concatMap show tokens
+parserError (t:_) = error $ "Parse error, next token: " ++ show t
 
 }
