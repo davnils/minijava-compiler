@@ -5,22 +5,24 @@ module TypeCheck where
 import           Control.Monad
 import           Data.Either (Either)
 import           Control.Monad.State
-import           Control.Monad.Trans.Either (runEitherT, EitherT, left)
+import           Control.Monad.Trans.Either (runEitherT, EitherT(..), left)
 import qualified Data.Map as M
 import           Data.Monoid ((<>))
+import           System.IO.Unsafe (unsafePerformIO) -- TODO: REMOVE
 
 import AST
 import Interface
 
-checkAST :: UnnAST -> Either String ()
+checkAST :: Monad m => UnnAST -> EitherT String m ()
 checkAST (Fix ast) = do
   interfaces <- return $ buildInterface (Fix ast)
+
   case interfaces of
     Just interfaces' -> do
       let state = (M.empty, Nothing, interfaces')
-      evalState (runEitherT . void $ check ast) state
+      EitherT $ return $ evalState (runEitherT . void $ check ast) state
     Nothing         -> do
-      fail "Failed to build class interface"
+      left "Failed to build class interface"
 
 type CheckState = (M.Map AId AVarType, Maybe (AId, InterfaceEntry), InterfaceMap)
 type MCheck = EitherT String (State CheckState)
@@ -33,13 +35,21 @@ withSnapshot action = do
 
 reserve :: AId -> AVarType -> MCheck ()
 reserve name kind = do
-  (prev, _, _) <- lift get
-  case M.lookup name prev of
-    Just val -> left $ errorMsg val
-    Nothing  -> lift . modify $ \(_, _2, _3) -> (M.insert name kind prev, _2, _3)
+  (prev, _, interfaces) <- lift get
+
+  let addEntry = lift . modify $ \(_, _2, _3) -> (M.insert name kind prev, _2, _3)
+  case (kind, M.lookup name prev) of
+    (_, Just val)                -> left $ errorMsg val
+
+    (TypeAppDefined classRef, _) -> do
+      when (M.lookup classRef interfaces == Nothing) (left $ missingType classRef)
+      addEntry
+
+    (_, Nothing)                 -> addEntry
   where
   errorMsg val = "Identifier '" <> name <> "'" <>
                  " already declared as type '" <> show val <> "'"
+  missingType kind = "Identifier declared with invalid type " <> kind
 
 unFix (Fix f) = f
 mapUnfix = map unFix
@@ -190,7 +200,8 @@ check (AExprInvocation (Fix expr) name args) = do
 
   -- validate inferred argument types
   case methodRef of
-    Nothing            -> left $ "Invalid method reference"
+    Nothing            -> left $
+      "Invalid method reference, couldn't find " <> name <> " in " <> className
     Just (iRet, iArgs) -> do
       types <- mapM (check . unFix) args
       when (types /= iArgs) $ left "Invalid type(s) of method argument."
@@ -224,6 +235,10 @@ check (AExprNewObject name) = do
     Nothing -> left $ "Missing class decleration of " <> name
     Just _  -> return $ TypeAppDefined name
 
-check (AExprNegation (Fix e)) = check e
+check (AExprNegation (Fix e)) = do
+  t <- check e
+  when (t /= TypeBoolean) $
+    left $ "Negation of non-boolean variable" <> show e
+  return t
 
 check AExprVoid = return TypeVoid

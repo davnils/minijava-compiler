@@ -1,15 +1,16 @@
 module Main where
 
-import AST
-import Backend
-import Control.Monad (when)
-import Lexer
-import Parser
-import System.Environment (getArgs)
-import System.Exit (ExitCode(..),exitWith)
-import TypeCheck
-
-excludedTokens = [TSingleLineComment, TMultiLineComment]
+import           AST
+import           Backend
+import           Control.Monad (liftM, when)
+import           Control.Monad.Trans (lift)
+import           Control.Monad.Trans.Either (runEitherT, EitherT(..), left)
+import           Lexer
+import           Parser
+import           ParserExtension
+import           System.Environment (getArgs)
+import           System.Exit (ExitCode(..),exitWith)
+import           TypeCheck
 
 main :: IO ()
 main = do
@@ -22,26 +23,31 @@ main = do
   when (backend /= "JVM") $
     failWith "Only backend=JVM is supported"
 
-  -- TODO: Add explicit error handling to lexer and parser
-
   input <- readFile sourcePath
-  let tokens   = alexScanTokens input
-      parsed   = parseMiniJava . filter (not . flip elem excludedTokens) . map fst $ tokens
-      checked  = checkAST parsed
+  checked <- runEitherT $ do
+    tokens <- EitherT . return . fmap filterTokens $ runAlex input lex
+    -- lift $ print tokens
+    -- lift . print $ show (length tokens) ++ " tokens parsed"
+    let parsed = parseMiniJava tokens
+    -- lift $ print parsed
+    verifyAST parsed
+    checkAST parsed
+    return parsed
 
-  print $ show (length tokens) ++ " tokens parsed"
 
   case checked of
     Left err -> failWith $ err
-    Right _  -> do
-      compileIntoFile parsed
+    Right tree -> do
+      compileIntoFile tree
       exitWith ExitSuccess
-
-  {- print tokens
-  print parsed
-  print checked -}
 
   where
   failWith str = do
     putStrLn str
     exitWith $ ExitFailure 1
+
+  lex = do
+    t <- alexMonadScan
+    case t of
+      EOFToken -> return []
+      t'       -> liftM (t' :) lex

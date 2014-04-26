@@ -79,6 +79,8 @@ VarDeclList
 MethodDeclList
   : public Type idliteral '(' FormalList ')' '{' VarDeclList StmtList return Expr ';' '}' MethodDeclList
                                         { AMethod $2 $3 (fixMap $5) (fixMap $8) (fixMap $9) (Fix $11) : $14 }
+  | public Type main '(' FormalList ')' '{' VarDeclList StmtList return Expr ';' '}' MethodDeclList
+                                        { AMethod $2 "main" (fixMap $5) (fixMap $8) (fixMap $9) (Fix $11) : $14 }
   | {- empty -}                         { [] }
 
 FormalList
@@ -110,23 +112,22 @@ Expr
   | Expr '-' Expr                       { AExprOp OperandMinus (Fix $1) (Fix $3)  }
   | Expr '*' Expr                       { AExprOp OperandMult (Fix $1) (Fix $3)  }
   | Expr '<' Expr                       { AExprOp OperandLess (Fix $1) (Fix $3)  }
-  | '(' Expr ')'                        { $2 }
-  | '!' Expr                            { AExprNegation (Fix $2) }
   | intliteral                          { AExprInt $1 }
   | true                                { AExprTrue }
   | false                               { AExprFalse }
+  | '!' Expr                            { AExprNegation (Fix $2) }
+  | ExprC                               { $1 }
+
+ExprC
+  : '(' Expr ')'                        { $2 }
   | idliteral                           { AExprIdentifier $1 }
   | this                                { AExprThis }
   | new int '[' Expr ']'                { AExprIntArray (Fix $4) }
   | new idliteral '(' ')'               { AExprNewObject $2 }
-  | Expr1 '[' Expr ']'                  { AExprList (Fix $1) (Fix $3) }
-  | Expr1 '.' length                    { AExprLength (Fix $1) }
-  | Expr1 '.' idliteral '(' ExpList ')' { AExprInvocation (Fix $1) $3 (fixMap $5) }
-
-Expr1
-  : '(' Expr ')'                        { $2 }
-  | this                                { AExprThis }
-  | idliteral                           { AExprIdentifier $1 }
+  | ExprC '[' Expr ']'                  { AExprList (Fix $1) (Fix $3) }
+  | ExprC '.' length                    { AExprLength (Fix $1) }
+  | ExprC '.' idliteral '(' ExpList ')' { AExprInvocation (Fix $1) $3 (fixMap $5) }
+  | ExprC '.' main '(' ExpList ')'      { AExprInvocation (Fix $1) ("main") (fixMap $5) }
 
 ExpList
   : Expr ExpRest                        { $1 : $2 }
@@ -143,6 +144,10 @@ mainMethod arg vars code = AMethod TypeVoid "main" [Fix $ AVar TypeString arg] 
 fixMap = map Fix
 
 parserError :: [Token] -> a
-parserError (t1:t2:t3:t4:t5:_) = error $ "Parse error, next tokens:" ++ concatMap ((" " ++) . show) [t1, t2, t3, t4, t5]
+parserError (t1:t2:t3:t4:t5:_) = error $ "Parse error, next tokens:" ++ renderTokens [t1, t2, t3, t4, t5]
+
+parserError tokens = error $ "Parse error @eof:" ++ renderTokens tokens
+
+renderTokens = concatMap ((" " ++) . show)
 
 }

@@ -1,7 +1,7 @@
 {-# LANGUAGE UndecidableInstances, ViewPatterns #-}
 
 module Interface 
-(InterfaceEntry, InterfaceMap, buildInterface, MethodEntry)
+(cata, cataM, InterfaceEntry, InterfaceMap, buildInterface, MethodEntry)
 where
 
 import           Control.Applicative ((<$>), pure)

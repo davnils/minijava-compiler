@@ -5,57 +5,60 @@ import Data.Char (isAlpha)
 
 }
 
-%wrapper "posn"
+%wrapper "monad"
 
 $digit = 0-9
 $alpha = [a-zA-Z]
 
 tokens :-
-  $white+                       ;
+      $white+                       ;
 
-  "class"                       {tag' TClass                    }
-  "public"                      {tag' TPublic                   }
-  "static"                      {tag' TStatic                   }
-  "main"                        {tag' TMain                     }
-  "new"                         {tag' TNew                      }
-  "return"                      {tag' TReturn                   }
-  "if"                          {tag' TIf                       }
-  "else"                        {tag' TElse                     }
-  "while"                       {tag' TWhile                    }
-  "System.out.println"          {tag' TPrint                    }
-  "length"                      {tag' TLength                   }
-  "this"                        {tag' TThis                     }
+<0>   "class"                       {tag' TClass                    }
+<0>   "public"                      {tag' TPublic                   }
+<0>   "static"                      {tag' TStatic                   }
+<0>   "main"                        {tag' TMain                     }
+<0>   "new"                         {tag' TNew                      }
+<0>   "return"                      {tag' TReturn                   }
+<0>   "if"                          {tag' TIf                       }
+<0>   "else"                        {tag' TElse                     }
+<0>   "while"                       {tag' TWhile                    }
+<0>   "System.out.println"          {tag' TPrint                    }
+<0>   "length"                      {tag' TLength                   }
+<0>   "this"                        {tag' TThis                     }
 
-  "void"                        {tag' TVoid                     }
-  "String"                      {tag' TString                   }
-  "int"                         {tag' TInt                      }
-  "boolean"                     {tag' TBoolean                  }
-  "true"                        {tag' TTrue                     }
-  "false"                       {tag' TFalse                    }
+<0>   "void"                        {tag' TVoid                     }
+<0>   "String"                      {tag' TString                   }
+<0>   "int"                         {tag' TInt                      }
+<0>   "boolean"                     {tag' TBoolean                  }
+<0>   "true"                        {tag' TTrue                     }
+<0>   "false"                       {tag' TFalse                    }
+   
+<0>   "!"                           {tag' TNegation                 }
+<0>   "&&"                          {tag' TLogicAnd                 }
+<0>   "<"                           {tag' TCompareLess              }
+<0>   "+"                           {tag' TAdd                      }
+<0>   "-"                           {tag' TSub                      }
+<0>   "*"                           {tag' TMul                      }
+   
+<0>   "="                           {tag' TAssignment               }
+<0>   ","                           {tag' TComma                    }
+<0>   "."                           {tag' TDot                      }
+<0>   ";"                           {tag' TSemiColon                }
+<0>   "("                           {tag' TLeftParen                }
+<0>   ")"                           {tag' TRightParen               }
+<0>   "["                           {tag' TLeftBracket              }
+<0>   "]"                           {tag' TRightBracket             }
+<0>   "{"                           {tag' TLeftBrace                }
+<0>   "}"                           {tag' TRightBrace               }
+<0>   "//".*                        {tag' TSingleLineComment        }
+<0>   "/*"                          {begin ign                      }
+<ign> "*/"                          {begin 0                        }
+<ign> .                             ;
 
-  "!"                           {tag' TNegation                 }
-  "&&"                          {tag' TLogicAnd                 }
-  "<"                           {tag' TCompareLess              }
-  "+"                           {tag' TAdd                      }
-  "-"                           {tag' TSub                      }
-  "*"                           {tag' TMul                      }
+<0>   [$alpha _][$alpha $digit _]*  {tag $ TIdLiteral               }
+<0>   0                             {tag $ TIntLiteral . read       }
+<0>   [1-9]$digit*                  {tag $ TIntLiteral . read       }
 
-  "="                           {tag' TAssignment               }
-  ","                           {tag' TComma                    }
-  "."                           {tag' TDot                      }
-  ";"                           {tag' TSemiColon                }
-  "("                           {tag' TLeftParen                }
-  ")"                           {tag' TRightParen               }
-  "["                           {tag' TLeftBracket              }
-  "]"                           {tag' TRightBracket             }
-  "{"                           {tag' TLeftBrace                }
-  "}"                           {tag' TRightBrace               }
-  "//".*                        {tag' TSingleLineComment        }
-  "/*"[\x00-\x10ffff]*"*/"      {tag' TMultiLineComment         }
-
-  [$alpha _][$alpha $digit _]*  {tag $ TIdLiteral               }
-  0                             {tag $ TIntLiteral  . read      }
-  [1-9]$digit*                  {tag $ TIntLiteral  . read      }
 
 {
 
@@ -102,20 +105,17 @@ data Token
  | TRightBrace
  | TSingleLineComment
  | TMultiLineComment
+
+ | EOFToken
+ | TOther
  deriving (Eq, Ord, Show)
 
-type SourceInfo = (Int, Int)
+tag :: (String -> Token) -> AlexInput -> Int -> Alex Token
+tag f (_, _, _, token) len = return $ f (take len token)
 
-readLong :: (Num a, Read a) => String -> a
-readLong = read . takeWhile (not . isAlpha)
+tag' :: Token -> AlexInput -> Int -> Alex Token
+tag' token _ _ = return token
 
-tag :: (String -> Token) -> AlexPosn -> String -> (Token, SourceInfo)
-tag f (AlexPn _ row col) input =  (f input, (row, col))
+alexEOF = return EOFToken
 
-tag' :: Token -> AlexPosn -> String -> (Token, SourceInfo)
-tag' res pos =  tag (const res) pos
-
-{-main = do
-  s <- getContents
-  print $ alexScanTokens s-}
 }
