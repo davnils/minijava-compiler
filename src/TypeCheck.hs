@@ -207,11 +207,7 @@ check AExprTrue = return TypeBoolean
 
 check AExprFalse = return TypeBoolean
 
-check (AExprIdentifier name) = do
-  (scope, _, _) <- get
-  case M.lookup name scope of
-    Nothing -> left $ "Undeclared identifier: " <> name
-    Just t  -> return t
+check (AExprIdentifier name) = getVarType name
 
 check AExprThis = do
   (_, Just (thisClass, _), _) <- get
