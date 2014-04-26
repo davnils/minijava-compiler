@@ -52,14 +52,13 @@ import Lexer
   idliteral                   { TIdLiteral $$      }
   intliteral                  { TIntLiteral  $$    }
 
-%%
+%left '&&'
+%nonassoc '<'
+%left '+' '-'
+%left '*'
+%left '!'
 
--- problem: need to parse the following
--- Type name; ...
--- Statement; ...
---
--- where Statement might be String = ..;
--- and vardecl might be String name;
+%%
 
 Program
   : MainClass ClassDeclList             { Fix . AProgram $ fixMap ($1 : $2) }
@@ -106,10 +105,13 @@ StmtList
   | {- empty -}                         { [] }
 
 Expr
-  : Expr Op Expr                        { AExprOp $2 (Fix $1) (Fix $3) }
-  | Expr '[' Expr ']'                   { AExprList (Fix $1) (Fix $3) }
-  | Expr '.' length                     { AExprLength (Fix $1) }
-  | Expr '.' idliteral '(' ExpList ')'  { AExprInvocation (Fix $1) $3 (fixMap $5) }
+  : Expr '&&' Expr                      { AExprOp OperandLogicalAnd (Fix $1) (Fix $3)  }
+  | Expr '+' Expr                       { AExprOp OperandPlus (Fix $1) (Fix $3)  }
+  | Expr '-' Expr                       { AExprOp OperandMinus (Fix $1) (Fix $3)  }
+  | Expr '*' Expr                       { AExprOp OperandMult (Fix $1) (Fix $3)  }
+  | Expr '<' Expr                       { AExprOp OperandLess (Fix $1) (Fix $3)  }
+  | '(' Expr ')'                        { $2 }
+  | '!' Expr                            { AExprNegation (Fix $2) }
   | intliteral                          { AExprInt $1 }
   | true                                { AExprTrue }
   | false                               { AExprFalse }
@@ -117,18 +119,18 @@ Expr
   | this                                { AExprThis }
   | new int '[' Expr ']'                { AExprIntArray (Fix $4) }
   | new idliteral '(' ')'               { AExprNewObject $2 }
-  | '!' Expr                            { AExprNegation (Fix $2) }
-  | '(' Expr ')'                        { $2 }
+  | Expr1 '[' Expr ']'                  { AExprList (Fix $1) (Fix $3) }
+  | Expr1 '.' length                    { AExprLength (Fix $1) }
+  | Expr1 '.' idliteral '(' ExpList ')' { AExprInvocation (Fix $1) $3 (fixMap $5) }
 
-Op
-  : '&&'                                { OperandLogicalAnd }
-  | '<'                                 { OperandLess }
-  | '+'                                 { OperandPlus }
-  | '-'                                 { OperandMinus }
-  | '*'                                 { OperandMult }
+Expr1
+  : '(' Expr ')'                        { $2 }
+  | this                                { AExprThis }
+  | idliteral                           { AExprIdentifier $1 }
 
 ExpList
   : Expr ExpRest                        { $1 : $2 }
+  | {- empty -}                         { [] }
 
 ExpRest
   : ',' Expr ExpRest                    { $2 : $3 }
@@ -141,6 +143,6 @@ mainMethod arg vars code = AMethod TypeVoid "main" [Fix $ AVar TypeString arg] 
 fixMap = map Fix
 
 parserError :: [Token] -> a
-parserError (t:_) = error $ "Parse error, next token: " ++ show t
+parserError (t1:t2:t3:t4:t5:_) = error $ "Parse error, next tokens:" ++ concatMap ((" " ++) . show) [t1, t2, t3, t4, t5]
 
 }

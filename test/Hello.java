@@ -1,19 +1,16 @@
-class A
-{}
-
-class TheMainClass
+class Hello
 {
   public static void main(String [] args)
   {
-    //int c = new TheMainClass().something();
-    int [] arr = new int[2];
+    int [] arr;
+    A a;
 
-    A a = new A();
+    arr = new int[2];
+    a = new A();
     System.out.println(a);
   }
-
-  public int something()
-  {
-    return 2;
-  }
 }
+
+class A {}
+class B {}
+class C {}

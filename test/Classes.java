@@ -8,6 +8,7 @@ class TheMainClass
 
 class Class2
 {
+  int x;
   public int testa(int a)
   {
     return 2;
@@ -25,6 +26,8 @@ class Class3
     int [] other;
     other = new int[2];
     other[2] = 2147483647;
+
+    sample.x += 2;
 
     return other[12] < 2;
   }

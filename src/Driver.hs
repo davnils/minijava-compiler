@@ -29,6 +29,8 @@ main = do
       parsed   = parseMiniJava . filter (not . flip elem excludedTokens) . map fst $ tokens
       checked  = checkAST parsed
 
+  print $ show (length tokens) ++ " tokens parsed"
+
   case checked of
     Left err -> failWith $ err
     Right _  -> do
