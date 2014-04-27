@@ -61,6 +61,8 @@ getVarType name = do
     Nothing -> left $ "Invalid variable reference '" <> name <> "'"
     Just t  -> return t
 
+arrayMapping = M.fromList [(TypeIntegerArray, TypeInteger), (TypeStringArray, TypeString)]
+
 check :: AEntry UnnAST -> MCheck AVarType
 
 ------------------- Programs ------------------- 
@@ -143,7 +145,7 @@ check (AAssignment (Fix name) (Fix e)) = do
 
 check (AIndexedAssignment (Fix name) (Fix e1) (Fix e2)) = do
   outerType <- check name
-  when (outerType /= TypeIntegerArray) $
+  when (outerType /= TypeIntegerArray && outerType /= TypeStringArray) $
     left $ "Invalid [] access to non-array variable " <> show name
     
   innerType <- check e1
@@ -151,8 +153,8 @@ check (AIndexedAssignment (Fix name) (Fix e1) (Fix e2)) = do
     left $ "Invalid non-integer index into variable " <> show name
     
   asssnType <- check e2
-  when (asssnType /= TypeInteger) $
-    left $ "Invalid non-integer assignment into variable " <> show name
+  when (M.lookup outerType arrayMapping /= Just asssnType) $
+    left $ "Invalid non-array-type assignment into variable " <> show name
 
   return TypeVoid
 
@@ -171,19 +173,18 @@ check (AExprOp op (Fix e1) (Fix e2)) = do
     " on types " <> show t1 <> " and " <> show t2
 
 check (AExprList (Fix e1) (Fix e2)) = do
-  outerType <- check e1
-  when (outerType /= TypeIntegerArray) $
-    left "Invalid [] operation on non-array type"
-
   innerType <- check e2
   when (innerType /= TypeInteger) $
     left "Invalid expression of type in [] operation"
 
-  return TypeInteger
+  outerType <- check e1
+  case M.lookup outerType arrayMapping of
+    Nothing -> left "Invalid [] operation on non-array type"
+    Just resType -> return resType
 
 check (AExprLength e) = do
  exprType <- check $ unFix e
- when (exprType /= TypeIntegerArray) $
+ when (exprType /= TypeIntegerArray && exprType /= TypeStringArray) $
    left "Invalid .length access to non-array type"
  return TypeInteger
 

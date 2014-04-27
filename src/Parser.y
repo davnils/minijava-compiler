@@ -138,10 +138,11 @@ IdLiteral
   : idliteral                           { $1       }
   | length                              { "length" }
   | main                                { "main"   }
+  | string                              { "String"   }
 
 {
 
-mainMethod arg vars code = AMethod TypeVoid "main" [Fix $ AVar TypeString arg] (fixMap vars) (fixMap code) (Fix AExprVoid)
+mainMethod arg vars code = AMethod TypeVoid "main" [Fix $ AVar TypeStringArray arg] (fixMap vars) (fixMap code) (Fix AExprVoid)
 
 fixMap = map Fix
 

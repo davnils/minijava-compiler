@@ -38,6 +38,7 @@ data AVarType
   | TypeBoolean
   | TypeInteger
   | TypeString
+  | TypeStringArray
   | TypeAppDefined AId
   | TypeVoid
   deriving (Eq, Ord, Show)
