@@ -16,15 +16,16 @@ tokens :-
 <0>   "class"                       {tag' TClass                    }
 <0>   "public"                      {tag' TPublic                   }
 <0>   "static"                      {tag' TStatic                   }
-<0>   "main"                        {tag' TMain                     }
 <0>   "new"                         {tag' TNew                      }
 <0>   "return"                      {tag' TReturn                   }
 <0>   "if"                          {tag' TIf                       }
 <0>   "else"                        {tag' TElse                     }
 <0>   "while"                       {tag' TWhile                    }
 <0>   "System.out.println"          {tag' TPrint                    }
-<0>   "length"                      {tag' TLength                   }
 <0>   "this"                        {tag' TThis                     }
+
+<0>   "main"                        {tag' TMain                     }
+<0>   "length"                      {tag' TLength                   }
 
 <0>   "void"                        {tag' TVoid                     }
 <0>   "String"                      {tag' TString                   }

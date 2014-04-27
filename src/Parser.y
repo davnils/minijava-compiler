@@ -64,43 +64,41 @@ Program
   : MainClass ClassDeclList             { Fix . AProgram $ fixMap ($1 : $2) }
 
 MainClass
-  : class idliteral '{' public static void main '(' string '[' ']' idliteral ')' '{' VarDeclList StmtList '}' '}'
+  : class IdLiteral '{' public static void main '(' string '[' ']' IdLiteral ')' '{' VarDeclList StmtList '}' '}'
                                         { AClass $2 [] [Fix $ mainMethod $12 $15 $16] }
 
 ClassDeclList
-  : class idliteral '{' VarDeclList MethodDeclList '}' ClassDeclList
+  : class IdLiteral '{' VarDeclList MethodDeclList '}' ClassDeclList
                                         { AClass $2 (fixMap $4) (fixMap $5) : $7}
   | {- empty -}                         { [] }
 
 VarDeclList
   : {- empty -}                         { [] }
-  | VarDeclList Type idliteral ';'      { $1 ++ [AVar $2 $3] }
+  | VarDeclList Type IdLiteral ';'      { $1 ++ [AVar $2 $3] }
 
 MethodDeclList
-  : public Type idliteral '(' FormalList ')' '{' VarDeclList StmtList return Expr ';' '}' MethodDeclList
+  : public Type IdLiteral '(' FormalList ')' '{' VarDeclList StmtList return Expr ';' '}' MethodDeclList
                                         { AMethod $2 $3 (fixMap $5) (fixMap $8) (fixMap $9) (Fix $11) : $14 }
-  | public Type main '(' FormalList ')' '{' VarDeclList StmtList return Expr ';' '}' MethodDeclList
-                                        { AMethod $2 "main" (fixMap $5) (fixMap $8) (fixMap $9) (Fix $11) : $14 }
   | {- empty -}                         { [] }
 
 FormalList
-  : Type idliteral ',' FormalList       { AVar $1 $2 : $4 }
-  | Type idliteral                      { [AVar $1 $2] }
+  : Type IdLiteral ',' FormalList       { AVar $1 $2 : $4 }
+  | Type IdLiteral                      { [AVar $1 $2] }
   | {- empty -}                         { [] }
 
 Type
   : int '[' ']'                         { TypeIntegerArray }
   | boolean                             { TypeBoolean }
   | int                                 { TypeInteger }
-  | idliteral                           { TypeAppDefined $1 }
+  | IdLiteral                           { TypeAppDefined $1 }
 
 Stmt
   : '{' StmtList '}'                    { AStatScope (fixMap $2) }
   | if '(' Expr ')' Stmt else Stmt      { AIf (Fix $3) (Fix $5) (Fix $7) }
   | while '(' Expr ')' Stmt             { AWhile (Fix $3) (Fix $5) }
   | print '(' Expr ')' ';'              { APrint (Fix $3) }
-  | idliteral '=' Expr ';'              { AAssignment (Fix $ AExprIdentifier $1) (Fix $3) }
-  | idliteral '[' Expr ']' '=' Expr ';' { AIndexedAssignment (Fix $ AExprIdentifier $1) (Fix $3) (Fix $6) }
+  | IdLiteral '=' Expr ';'              { AAssignment (Fix $ AExprIdentifier $1) (Fix $3) }
+  | IdLiteral '[' Expr ']' '=' Expr ';' { AIndexedAssignment (Fix $ AExprIdentifier $1) (Fix $3) (Fix $6) }
 
 StmtList 
   : Stmt StmtList                       { $1 : $2 }
@@ -120,22 +118,26 @@ Expr
 
 ExprC
   : '(' Expr ')'                        { $2 }
-  | idliteral                           { AExprIdentifier $1 }
+  | IdLiteral                           { AExprIdentifier $1 }
   | this                                { AExprThis }
   | new int '[' Expr ']'                { AExprIntArray (Fix $4) }
-  | new idliteral '(' ')'               { AExprNewObject $2 }
+  | new IdLiteral '(' ')'               { AExprNewObject $2 }
   | ExprC '[' Expr ']'                  { AExprList (Fix $1) (Fix $3) }
   | ExprC '.' length                    { AExprLength (Fix $1) }
-  | ExprC '.' idliteral '(' ExpList ')' { AExprInvocation (Fix $1) $3 (fixMap $5) }
-  | ExprC '.' main '(' ExpList ')'      { AExprInvocation (Fix $1) ("main") (fixMap $5) }
+  | ExprC '.' IdLiteral '(' ExpList ')' { AExprInvocation (Fix $1) $3 (fixMap $5) }
 
 ExpList
-  : Expr ExpRest                        { $1 : $2 }
-  | {- empty -}                         { [] }
+  : Expr ExpRest                        { $1 : $2  }
+  | {- empty -}                         { []       }
 
 ExpRest
-  : ',' Expr ExpRest                    { $2 : $3 }
-  | {- empty -}                         { [] }
+  : ',' Expr ExpRest                    { $2 : $3  }
+  | {- empty -}                         { []       }
+
+IdLiteral
+  : idliteral                           { $1       }
+  | length                              { "length" }
+  | main                                { "main"   }
 
 {
 
