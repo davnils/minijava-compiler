@@ -28,7 +28,7 @@ main = do
     tokens <- EitherT . return . fmap filterTokens $ runAlex input lex
     -- lift $ print tokens
     -- lift . print $ show (length tokens) ++ " tokens parsed"
-    let parsed = parseMiniJava tokens
+    parsed <- fmap parseMiniJava $ checkTokens tokens
     -- lift $ print parsed
     verifyAST parsed
     checkAST parsed
