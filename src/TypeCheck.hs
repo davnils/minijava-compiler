@@ -130,8 +130,8 @@ check (AWhile (Fix guard) (Fix s)) = withSnapshot $ do
 
 check (APrint (Fix e)) = do
   inner <- check e
-  when (inner == TypeVoid) $
-    left "Invalid print call on void type"
+  when (not $ elem inner [TypeInteger, TypeBoolean]) $
+    left $ "Invalid print call on type " <> show inner
   
   return $ TypeVoid
 

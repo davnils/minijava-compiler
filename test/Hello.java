@@ -4,10 +4,11 @@ class Hello
   {
     int [] arr;
     A a;
+    int b;
 
     arr = new int[2];
     a = new A();
-    System.out.println(a);
+    System.out.println(b);
   }
 }
 
