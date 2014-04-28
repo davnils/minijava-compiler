@@ -136,9 +136,7 @@ ExpRest
 
 IdLiteral
   : idliteral                           { $1       }
-  | length                              { "length" }
   | main                                { "main"   }
-  | string                              { "String"   }
 
 {
 
