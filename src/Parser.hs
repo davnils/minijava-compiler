@@ -1255,7 +1255,7 @@ parseMiniJava tks = happyRunIdentity happySomeParser where
 happySeq = happyDontSeq
 
 
-mainMethod arg vars code = AMethod TypeVoid "main" [Fix $ AVar TypeStringArray arg] (fixMap vars) (fixMap code) (Fix AExprVoid)
+mainMethod arg vars code = AMethod TypeVoid "main" [Fix $ AVar TypeVoid arg] (fixMap vars) (fixMap code) (Fix AExprVoid)
 
 fixMap = map Fix
 
