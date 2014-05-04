@@ -9,13 +9,23 @@ import           Interface
 
 type JID = String
 
+data VarType
+  = Field JOutput JID                                         -- type and name
+  | LocalVariable Integer
+  deriving (Eq, Ord, Show)
+
 data JOutput
   = JClass JID [JOutput] [JOutput]
   | JField JID JOutput                                        -- Name and type
   | JMethod JID [JOutput] [JOutput] [JOutput] JOutput         -- Name, arguments, locals, code, and return expr
   | JVar JID JOutput                                          -- Name and type
+  | JSequence JOutput JOutput
 
-  | JPushI Int
+  | JLoadObject Int
+  | JLoadLocal Int
+  | JPushI Int                                                -- ldc instruction
+  | JPutField JOutput JID
+  | JGetField JOutput JID
   | JMul JOutput JOutput
   | JAdd JOutput JOutput
   | JSub JOutput JOutput
@@ -27,6 +37,8 @@ data JOutput
   | JStringArray
   | JClassType JID
   | JVoid
+
+  | JIntermediateRef VarType
   deriving (Eq, Ord)
 
 instance Show JOutput where
@@ -48,10 +60,12 @@ compileIntoFile ast = do
   return ()
 
 -- (1) cataM with algebra mapping AST -> JOutput, with a map being constructed monadically, also maintain lengths
--- the state is carried throughout all sub-method computations
 
+-- | Mapping of local vars onto the naturals.
 type AllocState = M.Map AId Integer
-type AllocM = State (InterfaceEntry, AllocState) -- TODO: add accumulation of max-alloc
+
+-- | Class name, class interface, and mapping of local vars.
+type AllocM = State (AId, InterfaceEntry, AllocState) -- TODO: add accumulation of max-alloc
 
 unFix (Fix f) = f
 
@@ -62,11 +76,11 @@ executeStage1 c@(Fix (AClass name fields methods)) interfaces = JClass name fiel
   fields'        = map ((\(AVar kind name) -> JField name $ mapType kind) . unFix) $ fields
   methods'       = map (processMethod . unFix) methods
 
-  processMethod (AMethod _ name args vars code retExpr) = construct $ evalState (forM code evalBody) (interface, allocs)
+  processMethod (AMethod _ name' args vars code retExpr) = construct $ evalState (forM code evalBody) (name, interface, allocs)
     where
     evalBody s      = cataM alg1 s
-    allocs          = M.fromList $ zip (map ((\(AVar _ name) -> name) . unFix) vars) [0..]
-    construct stats = JMethod name undefined undefined undefined undefined
+    allocs          = M.fromList $ zip (map ((\(AVar _ name'') -> name'') . unFix) vars) [0..]
+    construct stats = JMethod name' undefined undefined undefined undefined
 
 -- Mapping from AST types onto JOutput
 mapType TypeIntegerArray   = JIntArray
@@ -79,18 +93,24 @@ mapType TypeVoid           = JVoid -- TODO: Should void be included?
 
 getAllocation :: AId -> AllocM (Maybe Integer)
 getAllocation name = do
-  (_, allocs) <- get
+  (_, _, allocs) <- get
   return $ M.lookup name allocs
+
+toSequence :: [JOutput] -> JOutput
+toSequence [x]    = x
+toSequence (x:xs) = JSequence x (toSequence xs)
+
+write :: JOutput -> JOutput -> AllocM JOutput
+write (JIntermediateRef (Field kind name)) expr = return . toSequence $
+  JLoadObject 0 : expr : [JPutField kind name]
 
 alg1 :: AEntry JOutput -> AllocM JOutput
 
 alg1 (APrint e) = undefined
 
--- won't this load the variable, expression, and then.. ?
--- perhaps need to make a distinction between loading / saving-to
-alg1 (AAssignment name e) = undefined
+alg1 (AAssignment target e) = write target e
 
-alg1 (AIndexedAssignment name idx e) = undefined
+alg1 (AIndexedAssignment target idx e) = undefined
 
 alg1 (AExprOp op e1 e2) = undefined
   where
@@ -109,14 +129,15 @@ alg1 AExprTrue = return $ JPushI 1
 alg1 AExprFalse = return $ JPushI 0
 
 -- | Look up identifier (either local or field variable)
---   TODO: how are method arguments handled? additional case?
---
---   ALSO: need to return an field/alloced indicator, nothing more
 alg1 (AExprIdentifier name) = do
   alloc <- getAllocation name
   case alloc of
-    Just num -> return $ undefined
-    Nothing  -> return $ undefined
+    Just num -> return . JIntermediateRef $ LocalVariable num
+    Nothing  -> do
+      -- reference to the current class, prepend class name
+      (className, (varInterface, _), _) <- get
+      let Just kind = fmap mapType $ M.lookup name varInterface
+      return $ JIntermediateRef $ Field kind (className  <> "/" <> name)
 
 alg1 AExprThis = undefined
 
