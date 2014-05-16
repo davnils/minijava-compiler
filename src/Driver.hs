@@ -24,21 +24,21 @@ main = do
     failWith "Only backend=JVM is supported"
 
   input <- readFile sourcePath
-  checked <- runEitherT $ do
+  res <- runEitherT $ do
     tokens <- EitherT . return . fmap filterTokens $ runAlex input lex
     -- lift $ print tokens
     -- lift . print $ show (length tokens) ++ " tokens parsed"
     parsed <- fmap parseMiniJava $ checkTokens tokens
     -- lift $ print parsed
     verifyAST parsed
-    checkAST parsed
-    return parsed
+    interfaces <- checkAST parsed
+    return (parsed, interfaces)
 
 
-  case checked of
+  case res of
     Left err -> failWith $ err
-    Right tree -> do
-      compileIntoFile tree
+    Right (tree, interfaces) -> do
+      compileIntoFile tree interfaces 
       exitWith ExitSuccess
 
   where

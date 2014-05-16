@@ -13,7 +13,7 @@ import           System.IO.Unsafe (unsafePerformIO) -- TODO: REMOVE
 import AST
 import Interface
 
-checkAST :: Monad m => UnnAST -> EitherT String m ()
+checkAST :: Monad m => UnnAST -> EitherT String m InterfaceMap
 checkAST (Fix ast) = do
   interfaces <- return $ buildInterface (Fix ast)
 
@@ -21,6 +21,7 @@ checkAST (Fix ast) = do
     Just interfaces' -> do
       let state = (M.empty, Nothing, interfaces')
       EitherT $ return $ evalState (runEitherT . void $ check ast) state
+      return interfaces'
     Nothing         -> do
       left "Failed to build class interface"
 
