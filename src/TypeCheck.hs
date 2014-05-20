@@ -234,7 +234,7 @@ check (AExprIntArray (Fix e)) = do
 check (AExprNewObject name) = do
   (_, _, interfaces) <- get
   case M.lookup name interfaces of
-    Nothing -> left $ "Missing class decleration of " <> name
+    Nothing -> left $ "Missing class declaration of " <> name
     Just _  -> return $ TypeAppDefined name
 
 check (AExprNegation (Fix e)) = do

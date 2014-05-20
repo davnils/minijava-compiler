@@ -6,7 +6,7 @@ import           AST
 import           Control.Monad (forM_)
 import           Control.Monad.State hiding (mapM)
 import qualified Data.Map as M
-import           Data.Maybe (fromMaybe)
+import           Data.Maybe (catMaybes, fromMaybe)
 import           Data.Monoid ((<>))
 import           Interface
 
@@ -40,6 +40,7 @@ data JOutput t
 
   | JGetStatic JID JID
   | JPrint PrintType
+  | JInvokeVirtual JID
   | JReturn
 
   | JIntermediateRef t
@@ -150,6 +151,82 @@ type AllocM = State (AId, InterfaceEntry, AllocState) -- TODO: add accumulation 
 
 unFix (Fix f) = f
 
+-- currently structured as top-down processing to the code level of individual methods
+-- then a catamorphism is evaluated over the method code body
+--
+-- some inherent problems with stuff like expr.methodname(arg1, arg2);
+--
+-- expr might be like obj1.somemethod(1,2)
+-- or a simple identifier 'obj2'
+--
+-- var1 = var2;
+-- var1[2 + var3] = var2;
+-- field[2 + var3] = var2;
+-- the LHS is limited to field/locals, i.e. the top-most entry is Identifier or List
+-- the expression in [expr] can be evaluated using only reads (i.e. catamorphism)
+-- this catamorphism needs to support reading all kinds of references
+--
+-- what this is saying is that all read-only computations are evaluated using a catamorphism.
+--
+-- algStat is mapped over the body of a method
+-- it can recurse on itself in the case of while etc
+
+getAllocation :: AId -> AllocM (Maybe Int)
+getAllocation name = do
+  (_, _, allocs) <- get
+  return $ M.lookup name allocs
+
+describeAllocation (AExprIdentifier name) = do
+  alloc <- getAllocation name
+  case alloc of
+    Just num -> return $ LocalVariable num
+    Nothing  -> do
+      -- reference to the current class, prepend class name
+      (className, (varInterface, _), _) <- get
+      let Just kind = fmap mapType $ M.lookup name varInterface
+      return $ Field (Fix kind) (className  <> "/" <> name)
+
+algStat :: AEntry UnnAST -> AllocM (Maybe JAST)
+
+algStat (AStatScope code) = do
+  code' <- mapM (algStat . unFix) code
+  return . Just . toSequence $ catMaybes code'
+
+algStat (AIf cond branch1 branch2) = undefined
+
+algStat (AWhile cond branch) = undefined
+
+algStat (AAssignment (Fix target) expr) = do
+  expr' <- evalExpr expr
+  desc <- describeAllocation target
+  fmap Just $ write desc expr'
+  where
+  write (Field kind name) expr = return . toSequence $
+    Fix (JLoadObject 0) : expr : [Fix $ JPutField kind name]
+
+  write (LocalVariable alloc) expr = return . toSequence $
+    expr : [Fix $ JStoreLocalI alloc]
+
+algStat (AIndexedAssignment target idx expr) = undefined
+
+-- TODO: derive type of original expr in some way.
+--       emit string "true"/"false" if boolean.
+algStat (APrint expr) = do
+  expr' <- evalExpr expr
+  return . Just $ toSequence
+    [expr',
+     Fix $ JGetStatic "java/lang/System/out" "Ljava/io/PrintStream;",
+     Fix JSwap,
+     Fix $ JPrint PrintInteger]
+
+algStat _ = return Nothing
+
+-- evalExpr evaluates the given expression (given as AEntry node) and puts the result on the stack
+evalExpr :: UnnAST -> AllocM JAST
+evalExpr = cataM algExpr
+
+-- also need write and read wrappers for fields and local variables
+
 -- | Transformation strategy
 --
 --   Pop arguments from the stack.
@@ -165,7 +242,7 @@ executeStage1 c@(Fix (AClass n f m)) interfaces = Fix $ JClass n fields' method
   processMethod (AMethod retType name' args vars code retExpr) = construct $ evalState worker state
     where
     state           = (n, interface, allocs)
-    worker          = forM (code <> [retExpr]) $ cataM alg1
+    worker          = fmap catMaybes $ forM (code <> [retExpr]) (algStat . unFix)
     allocs          = M.fromList $ zip (map ((\(AVar _ name'') -> name'') . unFix) vars) [1+length args..]
     args'           = map processVar args
     vars'           = map processVar vars
@@ -186,86 +263,54 @@ mapType TypeStringArray    = JStringArray
 mapType (TypeAppDefined n) = JClassType n
 mapType TypeVoid           = JVoid -- TODO: Should void be included?
 
-getAllocation :: AId -> AllocM (Maybe Int)
-getAllocation name = do
-  (_, _, allocs) <- get
-  return $ M.lookup name allocs
-
 toSequence :: [Fix JOutput] -> Fix JOutput
 toSequence [x]    = x
 toSequence (x:xs) = Fix $ JSequence x (toSequence xs)
 
--- would be nice with a strengthened type system in these situations
--- like the possiblity of excluding "weird :: a" from having a "proof"
--- | Take a var identifier, some computation, and assign the result
-write :: JOutput (Fix JOutput) -> JOutput (Fix JOutput) -> AllocM (Fix JOutput)
+algExpr :: AEntry JAST -> AllocM JAST
 
-write (JIntermediateRef (Fix (Field kind name))) expr = return . toSequence $
-  Fix (JLoadObject 0) : Fix expr : [Fix $ JPutField kind name]
-
-write (JIntermediateRef (Fix (LocalVariable alloc))) expr = return . toSequence $
-  Fix expr : [Fix $ JStoreLocalI alloc]
-
-readV (JIntermediateRef (Fix (Field kind name))) = unFix . toSequence $
-  Fix (JLoadObject 0) : [Fix $ JGetField kind name]
-
-readV (JIntermediateRef (Fix (LocalVariable alloc))) = JLoadLocalI alloc
-
-readV expr = expr
-
-alg1 :: AEntry JAST -> AllocM JAST
-
--- TODO: derive type of original expr in some way.
---       emit string "true"/"false" if boolean.
-alg1 (APrint e) = return $ toSequence [push e, Fix $ JGetStatic "java/lang/System/out" "Ljava/io/PrintStream;", Fix JSwap, Fix $ JPrint PrintInteger]
-  where
-  push (Fix (JIntermediateRef (Fix (Field kind name)))) = Fix $ JGetField kind name
-  push (Fix (JIntermediateRef (Fix (LocalVariable num)))) = Fix $ JLoadLocalI num
-  push _                            = e
-
-alg1 (AAssignment (Fix target) (Fix e)) = write target (readV e)
-
--- write(target) > -- > (push idx?)
-alg1 (AIndexedAssignment target idx e) = undefined
-
-alg1 (AExprOp op e1 e2) = undefined
+algExpr (AExprOp op e1 e2) = undefined
   where
   trans _ = undefined
 
-alg1 (AExprList e1 idx) = undefined
+algExpr (AExprList e1 idx) = undefined
 
-alg1 (AExprLength e) = undefined
+algExpr (AExprLength e) = undefined
 
-alg1 (AExprInvocation e name args) = undefined
+-- TODO (next): need to infer type of obj and the method signature
+-- either (1) produce partial results for invoc's in type check, or
+--        (2) produce fully annotated tree in type checker (probably doable!)
+algExpr (AExprInvocation obj name args) = 
+  return . toSequence $ [obj] <> args <> [Fix $ JInvokeVirtual (error "invoc implementation TBD")]
 
-alg1 (AExprInt val) = return . Fix $ JPushI val
+algExpr (AExprInt val) = return . Fix $ JPushI val
 
-alg1 AExprTrue = return . Fix $ JPushI 1
+algExpr AExprTrue = return . Fix $ JPushI 1
 
-alg1 AExprFalse = return . Fix $ JPushI 0
+algExpr AExprFalse = return . Fix $ JPushI 0
 
 -- | Look up identifier (either local or field variable)
-alg1 (AExprIdentifier name) = do
-  alloc <- getAllocation name
-  fmap Fix $ case alloc of
-    Just num -> return . JIntermediateRef . Fix $ LocalVariable num
-    Nothing  -> do
-      -- reference to the current class, prepend class name
-      (className, (varInterface, _), _) <- get
-      let Just kind = fmap mapType $ M.lookup name varInterface
-      return . JIntermediateRef . Fix $ Field (Fix kind) (className  <> "/" <> name)
+algExpr entry = do
+  alloc <- describeAllocation entry
+  return $ read alloc
 
-alg1 AExprThis = undefined
+  where
+  read (Field kind name) = toSequence $
+    Fix (JLoadObject 0) : [Fix $ JGetField kind name]
 
-alg1 (AExprIntArray name) = undefined
+  read (LocalVariable alloc) = Fix $ JLoadLocalI alloc
 
-alg1 (AExprNewObject name) = undefined
+algExpr AExprThis = return . Fix $ JLoadObject 0
 
-alg1 (AExprNegation e) = return . Fix $ JNegate e
+algExpr (AExprIntArray name) = undefined
 
-alg1 AExprVoid = return . Fix $ JReturn
+algExpr (AExprNewObject name) = undefined
 
-alg1 _ = undefined
+algExpr (AExprNegation e) = return . Fix $ JNegate e
+
+algExpr AExprVoid = return . Fix $ JReturn
+
+algExpr _ = undefined
 
 
 -- (2) render the entire source tree
