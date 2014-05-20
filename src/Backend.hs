@@ -12,6 +12,8 @@ import           Interface
 
 type JID = String
 
+type Label = String
+
 data JOutput t
   = JClass JID [t] [t]
   | JField JID t                    -- Name and type
@@ -25,10 +27,10 @@ data JOutput t
   | JPushI Int                      -- ldc instruction
   | JPutField t JID
   | JGetField t JID
-  | JMul t t
-  | JAdd t t
-  | JSub t t
-  | JNegate t
+  | JMul
+  | JAdd
+  | JSub
+  | JNegate
   | JSwap
 
   | JInt
@@ -41,15 +43,30 @@ data JOutput t
   | JGetStatic JID JID
   | JPrint PrintType
   | JInvokeVirtual JID
+  | JInvokeSpecial JID
   | JReturn
 
   | JIntermediateRef t
 
   | JNewArray
   | JArrayLength
+  | JLoadIArray
+  | JStoreIArray
 
   | Field t JID           -- type and name
   | LocalVariable Int
+
+  | JIfEq Label
+  | JCmpGe Label
+  | JGoto Label
+  | JLabel Label
+  | JAndI
+
+  | JDup
+  | JNewObject JID
+  | JNewIntArray
+
+  | JNop
   deriving Functor
 
 data PrintType
@@ -87,9 +104,10 @@ instance Show (JOutput String) where
   show (JField name kind) = emit [".field", "public", name, kind]
   show (JMethod name args vars code ret) = emitMulti [
     [".method", "public", attrib, name <> "(" <> concat args <> ")" <> ret],
-    [".limit", "stack", "10"], -- TODO
+    [".limit", "stack", "10"], -- TODO: calculate dynamically
     [".limit", "locals", show $ length args + length vars + 1],
     [fromMaybe "" code],
+    ["return"], -- TODO: REMOVE REMOVE REMOVE REMOVE 
     [".end", "method"]]
     where
     attrib = if (ret == "V") then "static" else ""
@@ -108,7 +126,20 @@ instance Show (JOutput String) where
 
   show (JSequence e t) = emitMulti [[e], [t]]
 
-  show (JSwap) = "swap"
+
+  show JMul    = "imul"
+  show JAdd    = "iadd"
+  show JSub    = "isub"
+  show JNegate = "ineg"
+  show JSwap = "swap"
+
+  show (JInvokeSpecial arg) = emit ["invokespecial", arg]
+  show JDup = "dup"
+  show (JNewObject arg) = emit ["new", arg]
+  show JNewIntArray = emit ["newarray", "int"]
+  show JArrayLength = "arraylength"
+  show JLoadIArray = "iaload"
+  show JStoreIArray = "iastore"
 
   -- TODO: restructure when print needs to infer the type of its argument
   --       how is the distinction of int/boolean handled? ("true" instead of 1..)
@@ -118,6 +149,12 @@ instance Show (JOutput String) where
     where
     argType = if arg == PrintInteger then "I" else "Ljava/lang/String;"
   show JReturn = "return"
+
+  show (JIfEq lbl) = emit ["ifeq", lbl]
+  show (JCmpGe lbl) = emit ["if_icmpge", lbl]
+  show (JGoto lbl) = emit ["goto", lbl]
+  show (JLabel lbl) = lbl <> ":"
+  show (JAndI) = "iand"
 
   show _ = ""
 
@@ -147,7 +184,7 @@ compileIntoFile ast interfaces = do
 type AllocState = M.Map AId Int
 
 -- | Class name, class interface, and mapping of local vars.
-type AllocM = State (AId, InterfaceEntry, AllocState) -- TODO: add accumulation of max-alloc
+type AllocM = State (AId, InterfaceEntry, AllocState, Integer) -- TODO: add accumulation of max-alloc
 
 unFix (Fix f) = f
 
@@ -173,7 +210,7 @@ unFix (Fix f) = f
 
 getAllocation :: AId -> AllocM (Maybe Int)
 getAllocation name = do
-  (_, _, allocs) <- get
+  (_, _, allocs, _) <- get
   return $ M.lookup name allocs
 
 describeAllocation (AExprIdentifier name) = do
@@ -182,19 +219,49 @@ describeAllocation (AExprIdentifier name) = do
     Just num -> return $ LocalVariable num
     Nothing  -> do
       -- reference to the current class, prepend class name
-      (className, (varInterface, _), _) <- get
+      (className, (varInterface, _), _, _) <- get
       let Just kind = fmap mapType $ M.lookup name varInterface
       return $ Field (Fix kind) (className  <> "/" <> name)
+
+makeLabel = do
+  (_1, _2, _3, count) <- get
+  put (_1, _2, _3, count + 1)
+  return $ "label" <> show count
 
 algStat :: AEntry UnnAST -> AllocM (Maybe JAST)
 
 algStat (AStatScope code) = do
   code' <- mapM (algStat . unFix) code
-  return . Just . toSequence $ catMaybes code'
+  case catMaybes code' of
+    [] -> return Nothing
+    l  -> return . Just $ toSequence l
 
-algStat (AIf cond branch1 branch2) = undefined
+algStat (AIf cond branch1 branch2) = do
+  [b1, b2] <- mapM (algStat . unFix) [branch1, branch2]
+  let defaultIns = fromMaybe (Fix JNop)
+      (b1', b2') = (defaultIns b1, defaultIns b2)
+  guard <- evalExpr cond
+  [lbl2, lblDone] <- mapM (const makeLabel) [1, 2]
+  return . Just $ toSequence [
+      guard,
+      Fix $ JIfEq lbl2,
+      b1',
+      Fix $ JGoto lblDone,
+      Fix $ JLabel lbl2,
+      b2',
+      Fix $ JLabel lblDone]
 
-algStat (AWhile cond branch) = undefined
+algStat (AWhile cond branch) = do
+  branch' <- fmap (fromMaybe (Fix JNop)) $ algStat (unFix branch)
+  [lblStart, lblDone] <- mapM (const makeLabel) [1, 2]
+  guard <- evalExpr cond
+  return . Just $ toSequence [
+      Fix $ JLabel lblStart,
+      guard,
+      Fix $ JIfEq lblDone,
+      branch',
+      Fix $ JGoto lblStart,
+      Fix $ JLabel lblDone]
 
 algStat (AAssignment (Fix target) expr) = do
   expr' <- evalExpr expr
@@ -206,8 +273,16 @@ algStat (AAssignment (Fix target) expr) = do
 
   write (LocalVariable alloc) expr = return . toSequence $
     expr : [Fix $ JStoreLocalI alloc]
+    -- TODO: store as object or int (based on type of expr)
 
-algStat (AIndexedAssignment target idx expr) = undefined
+algStat (AIndexedAssignment target idx expr) = do
+  [target', idx', expr'] <- mapM evalExpr [target, idx, expr]
+
+  return . Just $ toSequence [
+    target',
+    idx',
+    expr',
+    Fix $ JStoreIArray]
 
 -- TODO: derive type of original expr in some way.
 --       emit string "true"/"false" if boolean.
@@ -241,7 +316,7 @@ executeStage1 c@(Fix (AClass n f m)) interfaces = Fix $ JClass n fields' method
 
   processMethod (AMethod retType name' args vars code retExpr) = construct $ evalState worker state
     where
-    state           = (n, interface, allocs)
+    state           = (n, interface, allocs, 1)
     worker          = fmap catMaybes $ forM (code <> [retExpr]) (algStat . unFix)
     allocs          = M.fromList $ zip (map ((\(AVar _ name'') -> name'') . unFix) vars) [1+length args..]
     args'           = map processVar args
@@ -269,13 +344,35 @@ toSequence (x:xs) = Fix $ JSequence x (toSequence xs)
 
 algExpr :: AEntry JAST -> AllocM JAST
 
-algExpr (AExprOp op e1 e2) = undefined
+algExpr (AExprOp op e1 e2) = do
+  op' <- trans op
+  return . toSequence $ [e1, e2, op']
   where
-  trans _ = undefined
+  -- TODO: these should all be renamed
+  trans OperandLogicalAnd = return . Fix $ JAndI
 
-algExpr (AExprList e1 idx) = undefined
+  trans OperandLess       = do
+    lblTrue <- makeLabel
+    lblAfter <- makeLabel
+    return $ toSequence [Fix $ JCmpGe lblTrue,
+                         Fix $ JPushI 1,
+                         Fix $ JGoto lblAfter,
+                         Fix $ JLabel lblTrue,
+                         Fix $ JPushI 0,
+                         Fix $ JLabel lblAfter]
 
-algExpr (AExprLength e) = undefined
+  trans OperandPlus       = return $ Fix JAdd
+  trans OperandMult       = return $ Fix JMul
+  trans OperandMinus      = return $ Fix JSub
+
+algExpr (AExprList e1 idx) = return $ toSequence [
+  e1,
+  idx,
+  Fix JLoadIArray]
+
+algExpr (AExprLength e) = return $ toSequence [
+  e,
+  Fix JArrayLength]
 
 -- TODO (next): need to infer type of obj and the method signature
 -- either (1) produce partial results for invoc's in type check, or
@@ -289,6 +386,21 @@ algExpr AExprTrue = return . Fix $ JPushI 1
 
 algExpr AExprFalse = return . Fix $ JPushI 0
 
+algExpr AExprThis = return . Fix $ JLoadObject 0
+
+algExpr (AExprIntArray push) = return $ toSequence [
+  push,
+  Fix $ JNewIntArray]
+
+algExpr (AExprNewObject name) = return . toSequence $ [
+  Fix $ JNewObject name,
+  Fix JDup,
+  Fix . JInvokeSpecial $ name <> "/<init>()V"]
+
+algExpr (AExprNegation e) = return $ toSequence [e, Fix JNegate] -- TODO: TODO TODO TODO TODO TODO TODO: CAN INEG REALLY BE USED FOR BOOLEAN??? CHECK!!!!
+
+algExpr AExprVoid = return . Fix $ JReturn
+
 -- | Look up identifier (either local or field variable)
 algExpr entry = do
   alloc <- describeAllocation entry
@@ -298,17 +410,8 @@ algExpr entry = do
   read (Field kind name) = toSequence $
     Fix (JLoadObject 0) : [Fix $ JGetField kind name]
 
+  -- TODO: read as object or int (based on type of expr)
   read (LocalVariable alloc) = Fix $ JLoadLocalI alloc
-
-algExpr AExprThis = return . Fix $ JLoadObject 0
-
-algExpr (AExprIntArray name) = undefined
-
-algExpr (AExprNewObject name) = undefined
-
-algExpr (AExprNegation e) = return . Fix $ JNegate e
-
-algExpr AExprVoid = return . Fix $ JReturn
 
 algExpr _ = undefined
 
