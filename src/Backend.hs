@@ -47,6 +47,8 @@ data JOutput t
   | JInvokeVirtual JID
   | JInvokeSpecial JID
   | JReturn
+  | JReturnI
+  | JReturnObject
 
   | JIntermediateRef t
 
@@ -106,10 +108,9 @@ instance Show (JOutput String) where
   show (JField name kind) = emit [".field", "public", name, kind]
   show (JMethod name args vars code ret) = emitMulti [
     [".method", "public", attrib, name <> "(" <> concat args <> ")" <> ret],
-    [".limit", "stack", "10"], -- TODO: calculate dynamically
+    [".limit", "stack", "100"], -- TODO: calculate dynamically
     [".limit", "locals", show $ length args + length vars + 1],
     [fromMaybe "" code],
-    ["return"], -- TODO: REMOVE REMOVE REMOVE REMOVE 
     [".end", "method"]]
     where
     attrib = if (ret == "V") then "static" else ""
@@ -118,7 +119,9 @@ instance Show (JOutput String) where
   show (JPutField kind name) = emit ["putfield", name, kind]
 
   show (JInt) = "I"
+  show (JBoolean) = "I"
   show (JVoid) = "V"
+  show (JIntArray) = "[I"
   show (JStringArray) = "[Ljava/lang/String;"
 
   show (JLoadObject num) = emit ["aload", show num]
@@ -137,6 +140,7 @@ instance Show (JOutput String) where
   show JSwap = "swap"
 
   show (JInvokeSpecial arg) = emit ["invokespecial", arg]
+  show (JInvokeVirtual arg) = emit ["invokevirtual", arg]
   show JDup = "dup"
   show (JNewObject arg) = emit ["new", arg]
   show JNewIntArray = emit ["newarray", "int"]
@@ -149,6 +153,8 @@ instance Show (JOutput String) where
     where
     argType = if arg == PrintInteger then "I" else "Z"
   show JReturn = "return"
+  show JReturnI = "ireturn"
+  show JReturnObject = "areturn"
 
   show (JIfEq lbl) = emit ["ifeq", lbl]
   show (JCmpGe lbl) = emit ["if_icmpge", lbl]
@@ -158,8 +164,8 @@ instance Show (JOutput String) where
 
   show _ = ""
 
-compile :: AnnA -> InterfaceMap -> [JAST]
-compile ast interfaces = compiled
+compile :: AnnA -> InterfaceMap -> [(String, JAST)]
+compile ast interfaces = zipWith (\(Fix (Ann (_, AClass x _ _))) y -> (x,y)) classes compiled
   where
   ast' = cata handleMain ast
   handleMain (Ann (_, AMethod _ "main" [Fix (Ann (_, (AVar TypeVoid _)))] v c _)) = Fix (Ann (TypeVoid, defaultMain v c))
@@ -174,9 +180,9 @@ printJ = executeStage2
 
 compileIntoFile :: AnnA -> InterfaceMap -> IO ()
 compileIntoFile ast interfaces = do
-  let compiled = map printJ $ compile ast interfaces
-  forM_ compiled $ putStrLn
-  -- forM_ classNames $ \name -> writeFile (name <> ".s") ""
+  let compiled = compile ast interfaces
+      serialized = map (\(name, code) -> (name, printJ code)) compiled
+  forM_ serialized $ \(name, str) -> writeFile (name <> ".s") str
 
 -- (1) cataM with algebra mapping AST -> JOutput, with a map being constructed monadically, also maintain lengths
 
@@ -184,25 +190,9 @@ compileIntoFile ast interfaces = do
 type AllocState = M.Map AId Int
 
 -- | Class name, class interface, and mapping of local vars.
-type AllocM = State (AId, InterfaceEntry, AllocState, Integer) -- TODO: add accumulation of max-alloc
+type AllocM = State (AId, InterfaceMap, AllocState, Integer) -- TODO: add accumulation of max-alloc
 
--- currently structured as top-down processing to the code level of individual methods
--- then a catamorphism is evaluated over the method code body
---
--- some inherent problems with stuff like expr.methodname(arg1, arg2);
---
--- expr might be like obj1.somemethod(1,2)
--- or a simple identifier 'obj2'
---
--- var1 = var2;
--- var1[2 + var3] = var2;
--- field[2 + var3] = var2;
--- the LHS is limited to field/locals, i.e. the top-most entry is Identifier or List
--- the expression in [expr] can be evaluated using only reads (i.e. catamorphism)
--- this catamorphism needs to support reading all kinds of references
---
--- what this is saying is that all read-only computations are evaluated using a catamorphism.
---
+-- all read-only computations are evaluated using a catamorphism.
 -- algStat is mapped over the body of a method
 -- it can recurse on itself in the case of while etc
 
@@ -217,9 +207,20 @@ describeAllocation (AExprIdentifier name) = do
     Just num -> return $ LocalVariable num
     Nothing  -> do
       -- reference to the current class, prepend class name
-      (className, (varInterface, _), _, _) <- get
+      (className, iMap, _, _) <- get
+      let Just (varInterface, _) = M.lookup className iMap
       let Just kind = fmap mapType $ M.lookup name varInterface
       return $ Field (Fix kind) (className  <> "/" <> name)
+
+buildMethodSignature :: String -> String -> AllocM String
+buildMethodSignature className methodName = do
+  (_, iMap, _, _) <- get
+  let Just (retType, args) = do
+      (_, methodMap) <- M.lookup className iMap
+      M.lookup methodName methodMap
+
+  let (ret':args') = map (show . (mapType :: AVarType -> JOutput String)) (retType:args)
+  return $ className <> "/" <> methodName <> "(" <> concat args' <> ")" <> ret'
 
 makeLabel = do
   (_1, _2, _3, count) <- get
@@ -297,13 +298,7 @@ algStat (APrint expr) = do
 
 algStat _ = return Nothing
 
--- evalExpr evaluates the given expression (given as AEntry node) and puts the result on the stack
---
---  <>>>>>>>>>>>>>>><>>>>>>>>>>>>>>><>>>>>>>>>>>>>>><>>>>>>>>>>>>>>><>>>>>>>>>>>>>>><>>>>>>>>>>>>>>><>>>>>>>>>>>>>>><>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>><>>>>>>>>>>>>>>>>>
--- TODO: actually wan't a monadic paramorphism here
---       cuz then invocations can be handled by descending one level
---       in the original AST in the 'expr' argument, without pattern matching :)
---  <>>>>>>>>>>>>>>><>>>>>>>>>>>>>>><>>>>>>>>>>>>>>><>>>>>>>>>>>>>>><>>>>>>>>>>>>>>><>>>>>>>>>>>>>>><>>>>>>>>>>>>>>><>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>><>>>>>>>>>>>>>>>>>
+-- evalExpr evaluates the given expression (given as tagged AEntry node) and puts the result on the stack
 evalExpr :: AnnA -> AllocM JAST
 evalExpr = paraM algExpr 
 
@@ -319,14 +314,17 @@ unFA = (\(Ann (_, t)) -> t) . unFix
 executeStage1 :: AnnA -> InterfaceMap -> JAST
 executeStage1 c@(Fix (Ann (_, (AClass n f m)))) interfaces = Fix $ JClass n fields' methods'
   where
-  Just interface = M.lookup n interfaces
+  -- Just interface = M.lookup n interfaces
   fields'        = map (Fix . (\(AVar kind name) -> JField name . Fix $ mapType kind) . unFA) $ f
   methods'       = map (Fix . processMethod . unFA) m
 
   processMethod (AMethod retType name' args vars code retExpr) = construct $ evalState worker state
     where
-    state           = (n, interface, allocs, 1)
-    worker          = fmap catMaybes $ forM (code <> [retExpr]) (algStat . unFA)
+    state           = (n, interfaces, allocs, 1)
+    worker          = fmap catMaybes $ do
+                        body <- forM code (algStat . unFA)
+                        ret <- processRet retType retExpr
+                        return $ body <> ret
     allocs          = M.fromList $ zip (map ((\(AVar _ name'') -> name'') . unFA) vars) [1+length args..]
     args'           = map processVar args
     vars'           = map processVar vars
@@ -350,13 +348,20 @@ toSequence :: [Fix JOutput] -> Fix JOutput
 toSequence [x]    = x
 toSequence (x:xs) = Fix $ JSequence x (toSequence xs)
 
+processRet kind expr = do
+  expr' <- evalExpr expr
+  return . return . Just . toSequence $ [expr'] <> getRet kind
+  where
+  getRet TypeInteger = [Fix JReturnI]
+  getRet TypeVoid    = []
+  getRet _           = [Fix JReturnObject]
+
 algExpr :: (AnnA, Ann AVarType JAST) -> AllocM JAST
 
 algExpr (_, (Ann (_, AExprOp op e1 e2))) = do
   op' <- trans op
   return . toSequence $ [e1, e2, op']
   where
-  -- TODO: these should all be renamed
   trans OperandLogicalAnd = return . Fix $ JAndI
 
   trans OperandLess       = do
@@ -382,12 +387,11 @@ algExpr (_, (Ann (_, (AExprLength e)))) = return $ toSequence [
   e,
   Fix JArrayLength]
 
--- TODO: need to infer type of obj and the method signature
-algExpr (node, (Ann (_, (AExprInvocation obj name args)))) = 
-  return . toSequence $ [obj] <> args <> [Fix $ JInvokeVirtual (error "invoc implementation TBD")]
+algExpr (node, (Ann (_, (AExprInvocation obj name args)))) = do
+  signature <- buildMethodSignature (getClass node) name
+  return . toSequence $ [obj] <> args <> [Fix $ JInvokeVirtual signature]
   where
   getClass (Fix (Ann (_, (AExprInvocation (Fix (Ann (TypeAppDefined objType, _))) _ _)))) = objType
-  -- TODO: lookup ((getClass obj), name) in interfaces and locate the type signature, serialize, done
 
 algExpr (_, (Ann (_, (AExprInt val)))) = return . Fix $ JPushI val
 
