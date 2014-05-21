@@ -32,7 +32,6 @@ data JOutput t
   | JMul
   | JAdd
   | JSub
-  | JNegate
   | JSwap
 
   | JInt
@@ -85,7 +84,6 @@ emit = unwords
 emitMulti :: [[String]] -> String
 emitMulti = unlines . map emit
 
--- hihi
 emptySpace :: [a]
 emptySpace = []
 
@@ -94,27 +92,28 @@ instance Show (JOutput String) where
     -- [".source", name <> ".s"],
     [".class", "public", name],
     [".super", "java/lang/Object"],
+    emptySpace,
+    fields,
+    emptySpace,
     [".method", "public", "<init>()V"],
     ["aload_0"],
     ["invokespecial", "java/lang/Object/<init>()V"],
     ["return"],
     [".end", "method "],
     emptySpace,
-    fields,
-    emptySpace,
     methods]
 
-  show (JField name kind) = emit [".field", "public", name, kind]
+  show (JField name kind) = emitMulti [[".field", "public", name, kind]]
   show (JMethod name args vars code ret) = emitMulti [
     [".method", "public", attrib, name <> "(" <> concat args <> ")" <> ret],
-    [".limit", "stack", "100"], -- TODO: calculate dynamically
+    [".limit", "stack", "512"], -- TODO: calculate dynamically
     [".limit", "locals", show $ length args + length vars + 1],
     [fromMaybe "" code],
     [".end", "method"]]
     where
     attrib = if (ret == "V") then "static" else ""
-    -- :)
 
+  show (JGetField kind name) = emit ["getfield", name, kind]
   show (JPutField kind name) = emit ["putfield", name, kind]
 
   show (JInt) = "I"
@@ -122,6 +121,7 @@ instance Show (JOutput String) where
   show (JVoid) = "V"
   show (JIntArray) = "[I"
   show (JStringArray) = "[Ljava/lang/String;"
+  show (JClassType name) = "L" <> name <> ";"
 
   show (JLoadObject num) = emit ["aload", show num]
   show (JLoadLocalI num) = emit ["iload", show num]
@@ -135,7 +135,6 @@ instance Show (JOutput String) where
   show JMul    = "imul"
   show JAdd    = "iadd"
   show JSub    = "isub"
-  show JNegate = "ineg"
   show JSwap = "swap"
 
   show (JInvokeSpecial arg) = emit ["invokespecial", arg]
@@ -355,6 +354,7 @@ processRet kind expr = do
   return . return . Just . toSequence $ [expr'] <> getRet kind
   where
   getRet TypeInteger = [Fix JReturnI]
+  getRet TypeBoolean = [Fix JReturnI]
   getRet TypeVoid    = []
   getRet _           = [Fix JReturnObject]
 
@@ -412,7 +412,17 @@ algExpr (_, (Ann (_, AExprNewObject name))) = return . toSequence $ [
   Fix JDup,
   Fix . JInvokeSpecial $ name <> "/<init>()V"]
 
-algExpr (_, (Ann (_, AExprNegation e))) = return $ toSequence [e, Fix JNegate] -- TODO: TODO TODO TODO TODO TODO TODO: CAN INEG REALLY BE USED FOR BOOLEAN??? CHECK!!!!
+algExpr (_, (Ann (_, AExprNegation e))) = do
+  lblFalse <- makeLabel
+  lblAfter <- makeLabel
+  return $ toSequence [
+    e,
+    Fix $ JIfEq lblFalse,
+    Fix $ JPushI 0,
+    Fix $ JGoto lblAfter,
+    Fix $ JLabel lblFalse,
+    Fix $ JPushI 1,
+    Fix $ JLabel lblAfter]
 
 algExpr (_, (Ann (_, AExprVoid))) = return . Fix $ JReturn
 

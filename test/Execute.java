@@ -3,8 +3,8 @@ class Main
   public static void main(String [] args)
   {
     boolean dummy;
-    dummy = new Util().test(11, 11);
-    dummy = new Util().test(17, 17);
+    dummy = new Util().test(4, 4);
+    //dummy = new Util().test(17, 17);
   }
 }
 
@@ -31,9 +31,15 @@ class Util
     i = 1;
     while(i < val)
     {
+      /*System.out.println(true);
+      System.out.println(i);
+      System.out.println(true);*/
       j = 1;
       while(j < val + 1)
       {
+        /*System.out.println(false);
+        System.out.println(j);
+        System.out.println(false);*/
         if(!(i * j < val) && !(val < i * j))
         {
           System.out.println(i);
