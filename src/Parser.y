@@ -95,6 +95,7 @@ Type
 Stmt
   : '{' StmtList '}'                    { AStatScope (fixMap $2) }
   | if '(' Expr ')' Stmt else Stmt      { AIf (Fix $3) (Fix $5) (Fix $7) }
+  | if '(' Expr ')' Stmt                { AIf (Fix $3) (Fix $5) (Fix $ AStatScope []) }
   | while '(' Expr ')' Stmt             { AWhile (Fix $3) (Fix $5) }
   | print '(' Expr ')' ';'              { APrint (Fix $3) }
   | IdLiteral '=' Expr ';'              { AAssignment (Fix $ AExprIdentifier $1) (Fix $3) }
