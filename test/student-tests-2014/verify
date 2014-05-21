@@ -1,0 +1,8 @@
+#!/bin/bash
+
+rm *.s *.class &> /dev/null
+~/work/minijava-compiler/mjc JVM $1.java
+java -jar ~/Downloads/jasmin-2.4/jasmin.jar *.s
+echo "Running.."
+java $(cat $1.main) > cmp
+diff cmp $1.out

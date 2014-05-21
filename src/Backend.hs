@@ -11,7 +11,9 @@ import           Data.Monoid ((<>))
 import           Interface
 import           TypeCheck
 
-type JID = String
+newtype JID = JID String
+showID (JID str) = "'" <> str <> "'"
+unsafeEscape (JID str) = str
 
 type Label = String
 
@@ -90,7 +92,7 @@ emptySpace = []
 instance Show (JOutput String) where
   show (JClass name fields methods) = emitMulti [
     -- [".source", name <> ".s"],
-    [".class", "public", name],
+    [".class", "public", showID name],
     [".super", "java/lang/Object"],
     emptySpace,
     fields,
@@ -103,9 +105,9 @@ instance Show (JOutput String) where
     emptySpace,
     methods]
 
-  show (JField name kind) = emitMulti [[".field", "public", name, kind]]
+  show (JField name kind) = emitMulti [[".field", "public", showID name, kind]]
   show (JMethod name args vars code ret) = emitMulti [
-    [".method", "public", attrib, name <> "(" <> concat args <> ")" <> ret],
+    [".method", "public", attrib, showID (JID $ (unsafeEscape name) <> "(" <> concat args <> ")" <> ret)],
     [".limit", "stack", "512"], -- TODO: calculate dynamically
     [".limit", "locals", show $ length args + length vars + 1],
     [fromMaybe "" code],
@@ -113,15 +115,15 @@ instance Show (JOutput String) where
     where
     attrib = if (ret == "V") then "static" else ""
 
-  show (JGetField kind name) = emit ["getfield", name, kind]
-  show (JPutField kind name) = emit ["putfield", name, kind]
+  show (JGetField kind name) = emit ["getfield", showID name, kind]
+  show (JPutField kind name) = emit ["putfield", showID name, kind]
 
   show (JInt) = "I"
   show (JBoolean) = "I"
   show (JVoid) = "V"
   show (JIntArray) = "[I"
   show (JStringArray) = "[Ljava/lang/String;"
-  show (JClassType name) = "L" <> name <> ";"
+  show (JClassType name) = "L" <> unsafeEscape name <> ";"
 
   show (JLoadObject num) = emit ["aload", show num]
   show (JLoadLocalI num) = emit ["iload", show num]
@@ -137,16 +139,16 @@ instance Show (JOutput String) where
   show JSub    = "isub"
   show JSwap = "swap"
 
-  show (JInvokeSpecial arg) = emit ["invokespecial", arg]
-  show (JInvokeVirtual arg) = emit ["invokevirtual", arg]
+  show (JInvokeSpecial arg) = emit ["invokespecial", showID arg]
+  show (JInvokeVirtual arg) = emit ["invokevirtual", showID arg]
   show JDup = "dup"
-  show (JNewObject arg) = emit ["new", arg]
+  show (JNewObject arg) = emit ["new", showID arg]
   show JNewIntArray = emit ["newarray", "int"]
   show JArrayLength = "arraylength"
   show JLoadIArray = "iaload"
   show JStoreIArray = "iastore"
 
-  show (JGetStatic obj method) = emit ["getstatic", obj, method]
+  show (JGetStatic obj method) = emit ["getstatic", showID obj, showID method]
   show (JPrint arg) = emit ["invokevirtual", "java/io/PrintStream/println(" <> argType <> ")V"]
     where
     argType = if arg == PrintInteger then "I" else "Z"
@@ -208,7 +210,7 @@ describeAllocation (AExprIdentifier name) = do
       (className, iMap, _, _) <- get
       let Just (varInterface, _) = M.lookup className iMap
       let Just kind = fmap mapType $ M.lookup name varInterface
-      return $ Field (Fix kind) (className  <> "/" <> name)
+      return $ Field (Fix kind) (JID $ className  <> "/" <> name)
 
 buildMethodSignature :: String -> String -> AllocM String
 buildMethodSignature className methodName = do
@@ -293,7 +295,7 @@ algStat (APrint expr) = do
 
   return . Just $ toSequence
     [expr',
-     Fix $ JGetStatic "java/lang/System/out" "Ljava/io/PrintStream;",
+     Fix $ JGetStatic (JID "java/lang/System/out") (JID "Ljava/io/PrintStream;"),
      Fix JSwap,
      Fix $ JPrint printType]
 
@@ -305,18 +307,16 @@ evalExpr = paraM algExpr
 
 unFA = (\(Ann (_, t)) -> t) . unFix
 
--- also need write and read wrappers for fields and local variables
-
 -- | Transformation strategy
 --
 --   Pop arguments from the stack.
 --   Reserve local 0 for 'this'.
 --   Reserve 1.. for arguments.
 executeStage1 :: AnnA -> InterfaceMap -> JAST
-executeStage1 c@(Fix (Ann (_, (AClass n f m)))) interfaces = Fix $ JClass n fields' methods'
+executeStage1 c@(Fix (Ann (_, (AClass n f m)))) interfaces = Fix $ JClass (JID n) fields' methods'
   where
   -- Just interface = M.lookup n interfaces
-  fields'        = map (Fix . (\(AVar kind name) -> JField name . Fix $ mapType kind) . unFA) $ f
+  fields'        = map (Fix . (\(AVar kind name) -> JField (JID name) . Fix $ mapType kind) . unFA) $ f
   methods'       = map (Fix . processMethod . unFA) m
 
   processMethod (AMethod retType name' args vars code retExpr) = construct $ evalState worker state
@@ -329,7 +329,7 @@ executeStage1 c@(Fix (Ann (_, (AClass n f m)))) interfaces = Fix $ JClass n fie
     allocs          = M.fromList $ zip (map ((\(AVar _ name'') -> name'') . unFA) (args <> vars)) [1..]
     args'           = map processVar args
     vars'           = map processVar vars
-    construct ins   = JMethod name' args' vars' ins' (Fix $ mapType retType)
+    construct ins   = JMethod (JID name') args' vars' ins' (Fix $ mapType retType)
       where
       ins'
         | null ins  = Nothing
@@ -342,7 +342,7 @@ mapType TypeBoolean        = JBoolean
 mapType TypeInteger        = JInt
 mapType TypeString         = error "Invalid String type in backend"
 mapType TypeStringArray    = JStringArray
-mapType (TypeAppDefined n) = JClassType n
+mapType (TypeAppDefined n) = JClassType (JID n)
 mapType TypeVoid           = JVoid -- TODO: Should void be included?
 
 toSequence :: [Fix JOutput] -> Fix JOutput
@@ -362,7 +362,22 @@ algExpr :: (AnnA, Ann AVarType JAST) -> AllocM JAST
 
 algExpr (_, (Ann (_, AExprOp op e1 e2))) = do
   op' <- trans op
-  return . toSequence $ [e1, e2, op']
+  case op of
+    OperandLogicalAnd -> do
+      lblTerminate <- makeLabel
+      lblDone <- makeLabel
+      return . toSequence $ [
+        e1,
+        Fix $ JIfEq lblTerminate,
+        Fix $ JPushI 1,
+        e2,
+        op',
+        Fix $ JGoto lblDone,
+        Fix $ JLabel lblTerminate,
+        Fix $ JPushI 0,
+        Fix $ JLabel lblDone]
+
+    _ -> return . toSequence $ [e1, e2, op']
   where
   trans OperandLogicalAnd = return . Fix $ JAndI
 
@@ -391,7 +406,7 @@ algExpr (_, (Ann (_, (AExprLength e)))) = return $ toSequence [
 
 algExpr (node, (Ann (_, (AExprInvocation obj name args)))) = do
   signature <- buildMethodSignature (getClass node) name
-  return . toSequence $ [obj] <> args <> [Fix $ JInvokeVirtual signature]
+  return . toSequence $ [obj] <> args <> [Fix $ JInvokeVirtual (JID signature)]
   where
   getClass (Fix (Ann (_, (AExprInvocation (Fix (Ann (TypeAppDefined objType, _))) _ _)))) = objType
 
@@ -408,9 +423,9 @@ algExpr (_, (Ann (_, AExprIntArray push))) = return $ toSequence [
   Fix $ JNewIntArray]
 
 algExpr (_, (Ann (_, AExprNewObject name))) = return . toSequence $ [
-  Fix $ JNewObject name,
+  Fix . JNewObject $ JID name,
   Fix JDup,
-  Fix . JInvokeSpecial $ name <> "/<init>()V"]
+  Fix . JInvokeSpecial . JID $ name <> "/<init>()V"]
 
 algExpr (_, (Ann (_, AExprNegation e))) = do
   lblFalse <- makeLabel
