@@ -144,9 +144,6 @@ instance Show (JOutput String) where
   show JLoadIArray = "iaload"
   show JStoreIArray = "iastore"
 
-  -- TODO: restructure when print needs to infer the type of its argument
-  --       how is the distinction of int/boolean handled? ("true" instead of 1..)
-  --       should this translation be done by hand?
   show (JGetStatic obj method) = emit ["getstatic", obj, method]
   show (JPrint arg) = emit ["invokevirtual", "java/io/PrintStream/println(" <> argType <> ")V"]
     where
@@ -308,7 +305,7 @@ algStat _ = return Nothing
 --       in the original AST in the 'expr' argument, without pattern matching :)
 --  <>>>>>>>>>>>>>>><>>>>>>>>>>>>>>><>>>>>>>>>>>>>>><>>>>>>>>>>>>>>><>>>>>>>>>>>>>>><>>>>>>>>>>>>>>><>>>>>>>>>>>>>>><>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>><>>>>>>>>>>>>>>>>>
 evalExpr :: AnnA -> AllocM JAST
-evalExpr = cataM algExpr 
+evalExpr = paraM algExpr 
 
 unFA = (\(Ann (_, t)) -> t) . unFix
 
@@ -353,9 +350,9 @@ toSequence :: [Fix JOutput] -> Fix JOutput
 toSequence [x]    = x
 toSequence (x:xs) = Fix $ JSequence x (toSequence xs)
 
-algExpr :: Ann AVarType JAST -> AllocM JAST
+algExpr :: (AnnA, Ann AVarType JAST) -> AllocM JAST
 
-algExpr (Ann (_, AExprOp op e1 e2)) = do
+algExpr (_, (Ann (_, AExprOp op e1 e2))) = do
   op' <- trans op
   return . toSequence $ [e1, e2, op']
   where
@@ -376,44 +373,45 @@ algExpr (Ann (_, AExprOp op e1 e2)) = do
   trans OperandMult       = return $ Fix JMul
   trans OperandMinus      = return $ Fix JSub
 
-algExpr (Ann (_, (AExprList e1 idx))) = return $ toSequence [
+algExpr (_, (Ann (_, (AExprList e1 idx)))) = return $ toSequence [
   e1,
   idx,
   Fix JLoadIArray]
 
-algExpr (Ann (_, (AExprLength e))) = return $ toSequence [
+algExpr (_, (Ann (_, (AExprLength e)))) = return $ toSequence [
   e,
   Fix JArrayLength]
 
--- TODO (next): need to infer type of obj and the method signature
--- either (1) produce partial results for invoc's in type check, or
---        (2) produce fully annotated tree in type checker (probably doable!)
-algExpr (Ann (_, (AExprInvocation obj name args))) = 
+-- TODO: need to infer type of obj and the method signature
+algExpr (node, (Ann (_, (AExprInvocation obj name args)))) = 
   return . toSequence $ [obj] <> args <> [Fix $ JInvokeVirtual (error "invoc implementation TBD")]
+  where
+  getClass (Fix (Ann (_, (AExprInvocation (Fix (Ann (TypeAppDefined objType, _))) _ _)))) = objType
+  -- TODO: lookup ((getClass obj), name) in interfaces and locate the type signature, serialize, done
 
-algExpr (Ann (_, (AExprInt val))) = return . Fix $ JPushI val
+algExpr (_, (Ann (_, (AExprInt val)))) = return . Fix $ JPushI val
 
-algExpr (Ann (_, AExprTrue)) = return . Fix $ JPushI 1
+algExpr (_, (Ann (_, AExprTrue))) = return . Fix $ JPushI 1
 
-algExpr (Ann (_, AExprFalse)) = return . Fix $ JPushI 0
+algExpr (_, (Ann (_, AExprFalse))) = return . Fix $ JPushI 0
 
-algExpr (Ann (_, AExprThis)) = return . Fix $ JLoadObject 0
+algExpr (_, (Ann (_, AExprThis))) = return . Fix $ JLoadObject 0
 
-algExpr (Ann (_, AExprIntArray push)) = return $ toSequence [
+algExpr (_, (Ann (_, AExprIntArray push))) = return $ toSequence [
   push,
   Fix $ JNewIntArray]
 
-algExpr (Ann (_, AExprNewObject name)) = return . toSequence $ [
+algExpr (_, (Ann (_, AExprNewObject name))) = return . toSequence $ [
   Fix $ JNewObject name,
   Fix JDup,
   Fix . JInvokeSpecial $ name <> "/<init>()V"]
 
-algExpr (Ann (_, AExprNegation e)) = return $ toSequence [e, Fix JNegate] -- TODO: TODO TODO TODO TODO TODO TODO: CAN INEG REALLY BE USED FOR BOOLEAN??? CHECK!!!!
+algExpr (_, (Ann (_, AExprNegation e))) = return $ toSequence [e, Fix JNegate] -- TODO: TODO TODO TODO TODO TODO TODO: CAN INEG REALLY BE USED FOR BOOLEAN??? CHECK!!!!
 
-algExpr (Ann (_, AExprVoid)) = return . Fix $ JReturn
+algExpr (_, (Ann (_, AExprVoid))) = return . Fix $ JReturn
 
 -- | Look up identifier (either local or field variable)
-algExpr (Ann (kind, entry)) = do
+algExpr (_,(Ann (kind, entry))) = do
   alloc <- describeAllocation entry
   return $ read kind alloc
 
@@ -425,7 +423,7 @@ algExpr (Ann (kind, entry)) = do
   read (TypeAppDefined _) (LocalVariable alloc) = Fix $ JLoadObject alloc
   read _                  (LocalVariable alloc) = Fix $ JLoadLocalI alloc
 
-algExpr _ = undefined
+algExpr _ = error "algExpr: unexpected AST node"
 
 
 -- (2) render the entire source tree

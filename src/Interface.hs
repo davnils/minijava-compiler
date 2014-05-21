@@ -1,7 +1,7 @@
 {-# LANGUAGE UndecidableInstances, ViewPatterns #-}
 
 module Interface 
-(cata, cataM, InterfaceEntry, InterfaceMap, buildInterface, MethodEntry)
+(cata, cataM, para, paraM, InterfaceEntry, InterfaceMap, buildInterface, MethodEntry)
 where
 
 import           Control.Applicative ((<$>), pure)
@@ -36,8 +36,16 @@ data PartialEntry
 cata :: Functor f => (f r -> r) -> Fix f -> r
 cata f (Fix t) = f (cata f <$> t)
 
+para :: Functor f => ((Fix f, f r) -> r) -> Fix f -> r
+para f (Fix t) = f (Fix t, (para f <$> t))
+
 cataM :: (Traversable f, Monad m) => (f r -> m r) -> Fix f -> m r
 cataM f (Fix t) = mapM (cataM f) t >>= f
+
+paraM :: (Traversable f, Monad m) => ((Fix f, f r) -> m r) -> Fix f -> m r
+paraM f (Fix t) = do
+  subRes <- mapM (paraM f) t
+  f (Fix t, subRes)
 
 view :: UnnAST -> AEntry UnnAST
 view (Fix e) = e
