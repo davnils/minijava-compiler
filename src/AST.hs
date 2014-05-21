@@ -46,6 +46,8 @@ data AVarType
 data AOperand
   = OperandLogicalAnd
   | OperandLess
+  | OperandLessEqual
+  | OperandEqual
   | OperandPlus
   | OperandMinus
   | OperandMult

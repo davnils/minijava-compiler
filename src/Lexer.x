@@ -37,6 +37,11 @@ tokens :-
 <0>   "!"                           {tag' TNegation                 }
 <0>   "&&"                          {tag' TLogicAnd                 }
 <0>   "<"                           {tag' TCompareLess              }
+<0>   ">"                           {tag' TCompareGreater           }
+<0>   "<="                          {tag' TCompareLessEqual         }
+<0>   ">="                          {tag' TCompareGreaterEqual      }
+<0>   "=="                          {tag' TCompareEqual             }
+<0>   "!="                          {tag' TCompareNotEqual          }
 <0>   "+"                           {tag' TAdd                      }
 <0>   "-"                           {tag' TSub                      }
 <0>   "*"                           {tag' TMul                      }
@@ -90,6 +95,11 @@ data Token
  | TNegation
  | TLogicAnd
  | TCompareLess
+ | TCompareGreater
+ | TCompareLessEqual
+ | TCompareGreaterEqual
+ | TCompareEqual
+ | TCompareNotEqual
  | TAdd
  | TSub
  | TMul

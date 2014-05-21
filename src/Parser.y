@@ -34,6 +34,12 @@ import Lexer
   '!'                         { TNegation          }
   '&&'                        { TLogicAnd          }
   '<'                         { TCompareLess       }
+  '>'                         { TCompareGreater    }
+  '<='                        { TCompareLessEqual  }
+  '>='                        {TCompareGreaterEqual}
+  '=='                        { TCompareEqual      }
+  '!='                        { TCompareNotEqual   }
+
   '+'                         { TAdd               }
   '-'                         { TSub               }
   '*'                         { TMul               }
@@ -52,8 +58,14 @@ import Lexer
   idliteral                   { TIdLiteral $$      }
   intliteral                  { TIntLiteral  $$    }
 
+-- todo: check prec and assoc of new operators
 %left '&&'
 %nonassoc '<'
+%nonassoc '>'
+%nonassoc '<='
+%nonassoc '>='
+%left '=='
+%left '!='
 %left '+' '-'
 %left '*'
 %left '!'
@@ -111,6 +123,11 @@ Expr
   | Expr '-' Expr                       { AExprOp OperandMinus (Fix $1) (Fix $3)  }
   | Expr '*' Expr                       { AExprOp OperandMult (Fix $1) (Fix $3)  }
   | Expr '<' Expr                       { AExprOp OperandLess (Fix $1) (Fix $3)  }
+  | Expr '>' Expr                       { AExprOp OperandLess (Fix $3) (Fix $1)  }
+  | Expr '==' Expr                      { AExprOp OperandEqual (Fix $1) (Fix $3) }
+  | Expr '!=' Expr                      { AExprNegation (Fix $ AExprOp OperandEqual (Fix $1) (Fix $3))  }
+  | Expr '<=' Expr                      { AExprOp OperandLessEqual (Fix $1) (Fix $3)  }
+  | Expr '>=' Expr                      { AExprOp OperandLessEqual (Fix $3) (Fix $1)  }
   | intliteral                          { AExprInt $1 }
   | true                                { AExprTrue }
   | false                               { AExprFalse }

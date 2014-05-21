@@ -62,6 +62,9 @@ data JOutput t
 
   | JIfEq Label
   | JCmpGe Label
+  | JCmpGt Label
+  | JCmpNe Label
+  | JCmpNeA Label
   | JGoto Label
   | JLabel Label
   | JAndI
@@ -158,6 +161,9 @@ instance Show (JOutput String) where
 
   show (JIfEq lbl) = emit ["ifeq", lbl]
   show (JCmpGe lbl) = emit ["if_icmpge", lbl]
+  show (JCmpGt lbl) = emit ["if_icmpgt", lbl]
+  show (JCmpNe lbl) = emit ["if_icmpne", lbl]
+  show (JCmpNeA lbl) = emit ["if_acmpne", lbl]
   show (JGoto lbl) = emit ["goto", lbl]
   show (JLabel lbl) = lbl <> ":"
   show (JAndI) = "iand"
@@ -358,8 +364,38 @@ processRet kind expr = do
   getRet TypeVoid    = []
   getRet _           = [Fix JReturnObject]
 
+opSkeleton op = do
+  lblTrue <- makeLabel
+  lblAfter <- makeLabel
+  return $ toSequence [Fix $ op lblTrue,
+                       Fix $ JPushI 1,
+                       Fix $ JGoto lblAfter,
+                       Fix $ JLabel lblTrue,
+                       Fix $ JPushI 0,
+                       Fix $ JLabel lblAfter]
+
 algExpr :: (AnnA, Ann AVarType JAST) -> AllocM JAST
 
+-- identify equality testing on objects and arrays
+algExpr (Fix (Ann (_, AExprOp _ (Fix (Ann (TypeAppDefined _,_))) _)), (Ann (_, AExprOp op e1 e2))) = do
+  when (op /= OperandEqual) (error "internal error: unexpected object operator")
+  op' <- opSkeleton JCmpNeA
+  return . toSequence $ [
+    e1,
+    e2,
+    op'
+    ]
+
+algExpr (Fix (Ann (_, AExprOp _ (Fix (Ann (TypeIntegerArray,_))) _)), (Ann (_, AExprOp op e1 e2))) = do
+  when (op /= OperandEqual) (error "internal error: unexpected array operator")
+  op' <- opSkeleton JCmpNeA
+  return . toSequence $ [
+    e1,
+    e2,
+    op'
+    ]
+
+-- handle all the other cases
 algExpr (_, (Ann (_, AExprOp op e1 e2))) = do
   op' <- trans op
   case op of
@@ -381,15 +417,9 @@ algExpr (_, (Ann (_, AExprOp op e1 e2))) = do
   where
   trans OperandLogicalAnd = return . Fix $ JAndI
 
-  trans OperandLess       = do
-    lblTrue <- makeLabel
-    lblAfter <- makeLabel
-    return $ toSequence [Fix $ JCmpGe lblTrue,
-                         Fix $ JPushI 1,
-                         Fix $ JGoto lblAfter,
-                         Fix $ JLabel lblTrue,
-                         Fix $ JPushI 0,
-                         Fix $ JLabel lblAfter]
+  trans OperandLess       = opSkeleton JCmpGe
+  trans OperandLessEqual  = opSkeleton JCmpGt
+  trans OperandEqual      = opSkeleton JCmpNe
 
   trans OperandPlus       = return $ Fix JAdd
   trans OperandMult       = return $ Fix JMul
@@ -450,7 +480,6 @@ algExpr (_,(Ann (kind, entry))) = do
   read _ (Field kind name) = toSequence $
     Fix (JLoadObject 0) : [Fix $ JGetField kind name]
 
-  -- TODO: read as object or int (based on type of expr)
   read (TypeAppDefined _) (LocalVariable alloc) = Fix $ JLoadObject alloc
   read (TypeIntegerArray) (LocalVariable alloc) = Fix $ JLoadObject alloc
   read _                  (LocalVariable alloc) = Fix $ JLoadLocalI alloc

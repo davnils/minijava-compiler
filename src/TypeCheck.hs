@@ -185,6 +185,11 @@ check (AExprOp op (Fix e1) (Fix e2)) = do
   return . Fix . Ann $ (res, AExprOp op e1' e2')
   where
   inf OperandLess       TypeInteger TypeInteger = return $ TypeBoolean
+  inf OperandLessEqual  TypeInteger TypeInteger = return $ TypeBoolean
+  inf OperandEqual      TypeInteger TypeInteger = return $ TypeBoolean
+  inf OperandEqual      TypeBoolean TypeBoolean = return $ TypeBoolean
+  inf OperandEqual      (TypeAppDefined _) (TypeAppDefined _) = return $ TypeBoolean
+  inf OperandEqual      TypeIntegerArray TypeIntegerArray = return $ TypeBoolean
   inf OperandLogicalAnd TypeBoolean TypeBoolean = return $ TypeBoolean
   inf _                 TypeInteger TypeInteger = return $ TypeInteger
   inf _                 t1          t2          = left   $ 
