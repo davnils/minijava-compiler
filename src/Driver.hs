@@ -31,8 +31,8 @@ main = do
     parsed <- fmap parseMiniJava $ checkTokens tokens
     -- lift $ print parsed
     verifyAST parsed
-    interfaces <- checkAST parsed
-    return (parsed, interfaces)
+    (interfaces, ast') <- checkAST parsed
+    return (ast', interfaces)
 
 
   case res of

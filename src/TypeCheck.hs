@@ -1,4 +1,4 @@
-{-# LANGUAGE NoMonomorphismRestriction, ScopedTypeVariables, TupleSections #-}
+{-# LANGUAGE DeriveFoldable, DeriveFunctor, DeriveTraversable, NoMonomorphismRestriction, ScopedTypeVariables, TupleSections #-}
 
 module TypeCheck where
 
@@ -6,8 +6,10 @@ import           Control.Monad
 import           Data.Either (Either)
 import           Control.Monad.State
 import           Control.Monad.Trans.Either (runEitherT, EitherT(..), left)
+import           Data.Foldable (Foldable)
 import qualified Data.Map as M
 import           Data.Monoid ((<>))
+import           Data.Traversable (Traversable)
 import           System.IO.Unsafe (unsafePerformIO) -- TODO: REMOVE
 
 import AST
@@ -65,6 +67,8 @@ getVarType name = do
 arrayMapping = M.fromList [(TypeIntegerArray, TypeInteger), (TypeStringArray, TypeString)]
 
 newtype Ann tag a = Ann (tag, AEntry a)
+   deriving (Functor, Foldable, Traversable)
+
 type AnnA = Fix (Ann AVarType)
 
 check :: AEntry UnnAST -> MCheck AnnA
