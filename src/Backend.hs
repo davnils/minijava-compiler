@@ -52,7 +52,6 @@ data JOutput t
 
   | JIntermediateRef t
 
-  | JNewArray
   | JArrayLength
   | JLoadIArray
   | JStoreIArray
@@ -273,6 +272,9 @@ algStat (AAssignment (Fix (Ann (kind, target))) expr) = do
   write (TypeAppDefined _) (LocalVariable alloc) expr = return . toSequence $
     expr : [Fix $ JStoreObject alloc]
 
+  write (TypeIntegerArray) (LocalVariable alloc) expr = return . toSequence $
+    expr : [Fix $ JStoreObject alloc]
+
   write _ (LocalVariable alloc) expr = return . toSequence $
     expr : [Fix $ JStoreLocalI alloc]
 
@@ -325,7 +327,7 @@ executeStage1 c@(Fix (Ann (_, (AClass n f m)))) interfaces = Fix $ JClass n fie
                         body <- forM code (algStat . unFA)
                         ret <- processRet retType retExpr
                         return $ body <> ret
-    allocs          = M.fromList $ zip (map ((\(AVar _ name'') -> name'') . unFA) vars) [1+length args..]
+    allocs          = M.fromList $ zip (map ((\(AVar _ name'') -> name'') . unFA) (args <> vars)) [1..]
     args'           = map processVar args
     vars'           = map processVar vars
     construct ins   = JMethod name' args' vars' ins' (Fix $ mapType retType)
@@ -425,6 +427,7 @@ algExpr (_,(Ann (kind, entry))) = do
 
   -- TODO: read as object or int (based on type of expr)
   read (TypeAppDefined _) (LocalVariable alloc) = Fix $ JLoadObject alloc
+  read (TypeIntegerArray) (LocalVariable alloc) = Fix $ JLoadObject alloc
   read _                  (LocalVariable alloc) = Fix $ JLoadLocalI alloc
 
 algExpr _ = error "algExpr: unexpected AST node"
