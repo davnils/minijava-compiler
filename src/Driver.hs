@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 module Main where
 
 import           AST
@@ -10,6 +11,7 @@ import           Parser
 import           ParserExtension
 import           System.Environment (getArgs)
 import           System.Exit (ExitCode(..),exitWith)
+import           System.IO -- (hSetEncoding, stdin, utf8)
 import           TypeCheck
 
 main :: IO ()
@@ -23,7 +25,11 @@ main = do
   when (backend /= "JVM") $
     failWith "Only backend=JVM is supported"
 
-  input <- readFile sourcePath
+  withFile sourcePath ReadMode $ \hInput ->  do
+
+  hSetEncoding hInput latin1
+  !input <- hGetContents hInput
+
   res <- runEitherT $ do
     tokens <- EitherT . return . fmap filterTokens $ runAlex input lex
     -- lift $ print tokens

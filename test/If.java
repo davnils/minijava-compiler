@@ -38,6 +38,10 @@ class If
     {
       System.out.println(false);
     }
+    if(1 == 2 && true || false)
+    {
+      System.out.println(false);
+    }
     System.out.println(true);
   }
 }

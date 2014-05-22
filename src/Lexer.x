@@ -36,6 +36,7 @@ tokens :-
    
 <0>   "!"                           {tag' TNegation                 }
 <0>   "&&"                          {tag' TLogicAnd                 }
+<0>   "||"                          {tag' TLogicOr                  }
 <0>   "<"                           {tag' TCompareLess              }
 <0>   ">"                           {tag' TCompareGreater           }
 <0>   "<="                          {tag' TCompareLessEqual         }
@@ -94,6 +95,7 @@ data Token
 
  | TNegation
  | TLogicAnd
+ | TLogicOr
  | TCompareLess
  | TCompareGreater
  | TCompareLessEqual

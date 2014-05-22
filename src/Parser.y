@@ -33,6 +33,7 @@ import Lexer
 
   '!'                         { TNegation          }
   '&&'                        { TLogicAnd          }
+  '||'                        { TLogicOr           }
   '<'                         { TCompareLess       }
   '>'                         { TCompareGreater    }
   '<='                        { TCompareLessEqual  }
@@ -59,6 +60,7 @@ import Lexer
   intliteral                  { TIntLiteral  $$    }
 
 -- todo: check prec and assoc of new operators
+%left '||'
 %left '&&'
 %nonassoc '<'
 %nonassoc '>'
@@ -119,6 +121,7 @@ StmtList
 
 Expr
   : Expr '&&' Expr                      { AExprOp OperandLogicalAnd (Fix $1) (Fix $3)  }
+  | Expr '||' Expr                      { AExprOp OperandLogicalOr (Fix $1) (Fix $3)  }
   | Expr '+' Expr                       { AExprOp OperandPlus (Fix $1) (Fix $3)  }
   | Expr '-' Expr                       { AExprOp OperandMinus (Fix $1) (Fix $3)  }
   | Expr '*' Expr                       { AExprOp OperandMult (Fix $1) (Fix $3)  }

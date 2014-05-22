@@ -188,9 +188,12 @@ check (AExprOp op (Fix e1) (Fix e2)) = do
   inf OperandLessEqual  TypeInteger TypeInteger = return $ TypeBoolean
   inf OperandEqual      TypeInteger TypeInteger = return $ TypeBoolean
   inf OperandEqual      TypeBoolean TypeBoolean = return $ TypeBoolean
-  inf OperandEqual      (TypeAppDefined _) (TypeAppDefined _) = return $ TypeBoolean
+  inf OperandEqual      (TypeAppDefined t1) (TypeAppDefined t2) = do
+    when (t1 /= t2) $ left "Invalid objects to == operator"
+    return $ TypeBoolean
   inf OperandEqual      TypeIntegerArray TypeIntegerArray = return $ TypeBoolean
   inf OperandLogicalAnd TypeBoolean TypeBoolean = return $ TypeBoolean
+  inf OperandLogicalOr TypeBoolean TypeBoolean = return $ TypeBoolean
   inf _                 TypeInteger TypeInteger = return $ TypeInteger
   inf _                 t1          t2          = left   $ 
     "Invalid operator '" <> show op <> "'" <>

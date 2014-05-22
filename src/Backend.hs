@@ -61,6 +61,7 @@ data JOutput t
   | LocalVariable Int
 
   | JIfEq Label
+  | JIfNEq Label
   | JCmpGe Label
   | JCmpGt Label
   | JCmpNe Label
@@ -111,7 +112,7 @@ instance Show (JOutput String) where
   show (JField name kind) = emitMulti [[".field", "public", showID name, kind]]
   show (JMethod name args vars code ret) = emitMulti [
     [".method", "public", attrib, showID (JID $ (unsafeEscape name) <> "(" <> concat args <> ")" <> ret)],
-    [".limit", "stack", "512"], -- TODO: calculate dynamically
+    [".limit", "stack", "1024"], -- TODO: calculate dynamically
     [".limit", "locals", show $ length args + length vars + 1],
     [fromMaybe "" code],
     [".end", "method"]]
@@ -160,6 +161,7 @@ instance Show (JOutput String) where
   show JReturnObject = "areturn"
 
   show (JIfEq lbl) = emit ["ifeq", lbl]
+  show (JIfNEq lbl) = emit ["ifne", lbl]
   show (JCmpGe lbl) = emit ["if_icmpge", lbl]
   show (JCmpGt lbl) = emit ["if_icmpgt", lbl]
   show (JCmpNe lbl) = emit ["if_icmpne", lbl]
@@ -413,9 +415,22 @@ algExpr (_, (Ann (_, AExprOp op e1 e2))) = do
         Fix $ JPushI 0,
         Fix $ JLabel lblDone]
 
+    OperandLogicalOr -> do
+      lblTerminate <- makeLabel
+      lblDone <- makeLabel
+      return . toSequence $ [
+        e1,
+        Fix $ JIfNEq lblTerminate,
+        e2,
+        Fix $ JGoto lblDone,
+        Fix $ JLabel lblTerminate,
+        Fix $ JPushI 1,
+        Fix $ JLabel lblDone]
+
     _ -> return . toSequence $ [e1, e2, op']
   where
   trans OperandLogicalAnd = return . Fix $ JAndI
+  trans OperandLogicalOr = return $ toSequence []
 
   trans OperandLess       = opSkeleton JCmpGe
   trans OperandLessEqual  = opSkeleton JCmpGt
