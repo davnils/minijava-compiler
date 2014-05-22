@@ -91,13 +91,16 @@ VarDeclList
   | VarDeclList Type IdLiteral ';'      { $1 ++ [AVar $2 $3] }
 
 MethodDeclList
-  : public Type IdLiteral '(' FormalList ')' '{' VarDeclList StmtList return Expr ';' '}' MethodDeclList
+  : public Type IdLiteral '(' FormalHead ')' '{' VarDeclList StmtList return Expr ';' '}' MethodDeclList
                                         { AMethod $2 $3 (fixMap $5) (fixMap $8) (fixMap $9) (Fix $11) : $14 }
   | {- empty -}                         { [] }
 
+FormalHead
+  : Type IdLiteral FormalList           { AVar $1 $2 : $3 }
+  | {- empty -}                         { [] }
+
 FormalList
-  : Type IdLiteral ',' FormalList       { AVar $1 $2 : $4 }
-  | Type IdLiteral                      { [AVar $1 $2] }
+  : ',' Type IdLiteral FormalList       { AVar $2 $3 : $4 }
   | {- empty -}                         { [] }
 
 Type
