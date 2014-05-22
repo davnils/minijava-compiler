@@ -59,7 +59,6 @@ import Lexer
   idliteral                   { TIdLiteral $$      }
   intliteral                  { TIntLiteral  $$    }
 
--- todo: check prec and assoc of new operators
 %left '||'
 %left '&&'
 %nonassoc '<'

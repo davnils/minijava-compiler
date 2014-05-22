@@ -7,7 +7,7 @@ import           Control.Monad (forM_)
 import           Control.Monad.State hiding (mapM)
 import qualified Data.Map as M
 import           Data.Maybe (catMaybes, fromMaybe)
-import           Data.Monoid ((<>))
+import           Data.Monoid ((<>), Monoid(..))
 import           Interface
 import           TypeCheck
 
@@ -19,16 +19,16 @@ type Label = String
 
 data JOutput t
   = JClass JID [t] [t]
-  | JField JID t                    -- Name and type
-  | JMethod JID [t] [t] (Maybe t) t -- Name, arguments, locals, code, and return type
-  | JVar JID t                      -- Name and type
+  | JField JID t                        -- Name and type
+  | JMethod Int JID [t] [t] (Maybe t) t -- Stack, Name, arguments, locals, code, and return type
+  | JVar JID t                          -- Name and type
   | JSequence t t
 
   | JLoadObject Int
   | JLoadLocalI Int
   | JStoreObject Int
   | JStoreLocalI Int
-  | JPushI Int                      -- ldc instruction
+  | JPushI Int                          -- ldc instruction
   | JPutField t JID
   | JGetField t JID
   | JMul
@@ -45,13 +45,11 @@ data JOutput t
 
   | JGetStatic JID JID
   | JPrint PrintType
-  | JInvokeVirtual JID
+  | JInvokeVirtual JID Int
   | JInvokeSpecial JID
   | JReturn
   | JReturnI
   | JReturnObject
-
-  | JIntermediateRef t
 
   | JArrayLength
   | JLoadIArray
@@ -68,7 +66,6 @@ data JOutput t
   | JCmpNeA Label
   | JGoto Label
   | JLabel Label
-  | JAndI
 
   | JDup
   | JNewObject JID
@@ -110,9 +107,9 @@ instance Show (JOutput String) where
     methods]
 
   show (JField name kind) = emitMulti [[".field", "public", showID name, kind]]
-  show (JMethod name args vars code ret) = emitMulti [
+  show (JMethod stack name args vars code ret) = emitMulti [
     [".method", "public", attrib, showID (JID $ (unsafeEscape name) <> "(" <> concat args <> ")" <> ret)],
-    [".limit", "stack", "1024"], -- TODO: calculate dynamically
+    [".limit", "stack", show stack],
     [".limit", "locals", show $ length args + length vars + 1],
     [fromMaybe "" code],
     [".end", "method"]]
@@ -143,8 +140,8 @@ instance Show (JOutput String) where
   show JSub    = "isub"
   show JSwap = "swap"
 
-  show (JInvokeSpecial arg) = emit ["invokespecial", showID arg]
-  show (JInvokeVirtual arg) = emit ["invokevirtual", showID arg]
+  show (JInvokeSpecial arg)   = emit ["invokespecial", showID arg]
+  show (JInvokeVirtual arg _) = emit ["invokevirtual", showID arg]
   show JDup = "dup"
   show (JNewObject arg) = emit ["new", showID arg]
   show JNewIntArray = emit ["newarray", "int"]
@@ -168,7 +165,6 @@ instance Show (JOutput String) where
   show (JCmpNeA lbl) = emit ["if_acmpne", lbl]
   show (JGoto lbl) = emit ["goto", lbl]
   show (JLabel lbl) = lbl <> ":"
-  show (JAndI) = "iand"
 
   show _ = ""
 
@@ -337,7 +333,7 @@ executeStage1 c@(Fix (Ann (_, (AClass n f m)))) interfaces = Fix $ JClass (JID 
     allocs          = M.fromList $ zip (map ((\(AVar _ name'') -> name'') . unFA) (args <> vars)) [1..]
     args'           = map processVar args
     vars'           = map processVar vars
-    construct ins   = JMethod (JID name') args' vars' ins' (Fix $ mapType retType)
+    construct ins   = JMethod (executeStage3 $ toSequence ins) (JID name') args' vars' ins' (Fix $ mapType retType)
       where
       ins'
         | null ins  = Nothing
@@ -407,9 +403,7 @@ algExpr (_, (Ann (_, AExprOp op e1 e2))) = do
       return . toSequence $ [
         e1,
         Fix $ JIfEq lblTerminate,
-        Fix $ JPushI 1,
         e2,
-        op',
         Fix $ JGoto lblDone,
         Fix $ JLabel lblTerminate,
         Fix $ JPushI 0,
@@ -429,7 +423,7 @@ algExpr (_, (Ann (_, AExprOp op e1 e2))) = do
 
     _ -> return . toSequence $ [e1, e2, op']
   where
-  trans OperandLogicalAnd = return . Fix $ JAndI
+  trans OperandLogicalAnd = return $ toSequence []
   trans OperandLogicalOr = return $ toSequence []
 
   trans OperandLess       = opSkeleton JCmpGe
@@ -451,7 +445,7 @@ algExpr (_, (Ann (_, (AExprLength e)))) = return $ toSequence [
 
 algExpr (node, (Ann (_, (AExprInvocation obj name args)))) = do
   signature <- buildMethodSignature (getClass node) name
-  return . toSequence $ [obj] <> args <> [Fix $ JInvokeVirtual (JID signature)]
+  return . toSequence $ [obj] <> args <> [Fix $ JInvokeVirtual (JID signature) (length args)]
   where
   getClass (Fix (Ann (_, (AExprInvocation (Fix (Ann (TypeAppDefined objType, _))) _ _)))) = objType
 
@@ -506,3 +500,41 @@ algExpr _ = error "algExpr: unexpected AST node"
 
 executeStage2 :: JAST -> String
 executeStage2 = cata show
+
+
+-- (3) calculate stack usage of method
+
+executeStage3 :: JAST -> Int
+executeStage3 = fst . processSeq (0, 0) . unFix
+
+-- need to take the maximum as well
+
+algStack (JLoadObject _)      =  1
+algStack (JLoadLocalI _)      =  1
+algStack (JStoreObject _)     = -1
+algStack (JStoreLocalI _)     = -1
+algStack (JPushI _)           =  1
+algStack JMul                 = -1
+algStack JAdd                 = -1
+algStack JSub                 = -1
+algStack (JGetStatic _ _)     =  1
+algStack (JPrint _)           = -2
+algStack (JInvokeVirtual _ c) = -c
+algStack (JInvokeSpecial _)   = -1
+algStack JLoadIArray          = -1
+algStack JStoreIArray         = -3
+algStack (JIfEq _)            = -1
+algStack (JIfNEq _)           = -1
+algStack (JCmpGe _)           = -2
+algStack (JCmpGt _)           = -2
+algStack (JCmpNe _)           = -2
+algStack (JCmpNeA _)          = -2
+algStack JDup                 =  1
+algStack (JNewObject _)       =  1
+algStack _                    =  0
+
+processSeq (p1, p2) (JSequence (Fix t1) (Fix t2)) = processSeq vals t2
+  where
+  vals = processSeq (p1, p2) t1
+
+processSeq (p1, p2) code = let contrib = algStack code in (max p1 (p2 + contrib), p2 + contrib) 

@@ -1,4 +1,3 @@
-{-# LANGUAGE BangPatterns #-}
 module Main where
 
 import           AST
@@ -28,14 +27,11 @@ main = do
   withFile sourcePath ReadMode $ \hInput ->  do
 
   hSetEncoding hInput latin1
-  !input <- hGetContents hInput
+  input <- hGetContents hInput
 
   res <- runEitherT $ do
     tokens <- EitherT . return . fmap filterTokens $ runAlex input lex
-    -- lift $ print tokens
-    -- lift . print $ show (length tokens) ++ " tokens parsed"
     parsed <- fmap parseMiniJava $ checkTokens tokens
-    -- lift $ print parsed
     verifyAST parsed
     (interfaces, ast') <- checkAST parsed
     return (ast', interfaces)

@@ -28,10 +28,3 @@ data PartialEntry
 
 verifyAST :: Monad m => UnnAST -> EitherT String m ()
 verifyAST ast = return ()
-
-{-cataM alg ast >> return ()
-
-alg (AExprIntArray _) = return PArrayAlloc
-alg (AExprList (PArrayAlloc) _)
-                      = left "Invalid declaration of double-array"
-alg _                 = return POther-}
